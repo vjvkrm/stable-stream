@@ -1,0 +1,63 @@
+{
+  "name": "@stable-stream/core",
+  "version": "1.0.0",
+  "description": "Stream structured JSON from LLMs with zero layout shift. Incremental parsing, schema hydration, and type-safe merging.",
+  "author": "Vijay Singh",
+  "license": "MIT",
+  "keywords": [
+    "llm",
+    "streaming",
+    "json",
+    "parser",
+    "zod",
+    "openai",
+    "anthropic",
+    "ai",
+    "structured-output",
+    "incremental-parsing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stable-stream/stable-stream.git",
+    "directory": "packages/core"
+  },
+  "homepage": "https://github.com/stable-stream/stable-stream#readme",
+  "bugs": {
+    "url": "https://github.com/stable-stream/stable-stream/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.spec.*"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "zod": "^3.22.0 || ^4.0.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.24.0"
+  }
+}

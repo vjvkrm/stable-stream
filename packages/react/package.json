@@ -1,0 +1,71 @@
+{
+  "name": "@stable-stream/react",
+  "version": "1.0.0",
+  "description": "React hook for streaming structured JSON from LLMs with zero layout shift.",
+  "author": "Vijay Singh",
+  "license": "MIT",
+  "keywords": [
+    "react",
+    "hook",
+    "llm",
+    "streaming",
+    "json",
+    "zod",
+    "openai",
+    "anthropic",
+    "ai",
+    "structured-output"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stable-stream/stable-stream.git",
+    "directory": "packages/react"
+  },
+  "homepage": "https://github.com/stable-stream/stable-stream#readme",
+  "bugs": {
+    "url": "https://github.com/stable-stream/stable-stream/issues"
+  },
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.test.*",
+    "!dist/**/*.spec.*"
+  ],
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint .",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0 || ^19.0.0",
+    "zod": "^3.22.0 || ^4.0.0"
+  },
+  "dependencies": {
+    "@stable-stream/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19.0.0",
+    "happy-dom": "^16.0.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "vitest": "^2.1.0",
+    "zod": "^3.24.0"
+  }
+}

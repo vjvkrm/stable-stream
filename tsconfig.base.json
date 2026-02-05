@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "declaration": true,
+    "sourceMap": true,
+
+    /* 1. Better Monorepo Navigation */
+    "declarationMap": true,
+
+    /* 2. Modern Bundler Safety */
+    "isolatedModules": true,
+
+    /* 3. Clean Imports */
+    "verbatimModuleSyntax": true
+  }
+}
