@@ -149,15 +149,47 @@ function App() {
 ```tsx
 import { streamObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
+import { useStableStream } from '@stable-stream/react';
 
-const { partialObjectStream } = streamObject({
+const { textStream } = streamObject({
   model: openai('gpt-4o'),
   schema: ProfileSchema,
   prompt: 'Generate a user profile',
 });
 
-// partialObjectStream is already parsed — use directly or with useStableStream
-// for additional features like skeleton pre-filling
+// textStream gives raw JSON chunks - works directly!
+const { data } = useStableStream({
+  schema: ProfileSchema,
+  source: textStream,
+});
+```
+
+### With Anthropic
+
+```tsx
+import Anthropic from '@anthropic-ai/sdk';
+import { useStableStream } from '@stable-stream/react';
+
+const anthropic = new Anthropic();
+
+async function* streamJson(prompt: string) {
+  const stream = anthropic.messages.stream({
+    model: 'claude-sonnet-4-20250514',
+    max_tokens: 1024,
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+      yield event.delta.text;
+    }
+  }
+}
+
+const { data } = useStableStream({
+  schema: ProfileSchema,
+  source: streamJson('Return a user profile as JSON'),
+});
 ```
 
 ### Core (Framework-Agnostic)
