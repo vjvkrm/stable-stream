@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { z } from 'zod';
-import { useStableStream } from '@stable-stream/react';
-import { createIncrementalParser } from '@stable-stream/core';
+import { useState, useEffect, useRef } from "react";
+import { z } from "zod";
+import { useStableStream } from "@stable-stream/react";
+import { createIncrementalParser } from "@stable-stream/core";
 
 // ============================================
 // Schemas
@@ -22,16 +22,20 @@ const EmployeeFormSchema = z.object({
 
 const EmployeeTableSchema = z.object({
   title: z.string(),
-  rows: z.array(z.object({
-    id: z.number(),
-    name: z.string(),
-    email: z.string(),
-    department: z.string(),
-    role: z.string(),
-    salary: z.number(),
-    status: z.string(),
-    location: z.string(),
-  })).min(10),
+  rows: z
+    .array(
+      z.object({
+        id: z.number(),
+        name: z.string(),
+        email: z.string(),
+        department: z.string(),
+        role: z.string(),
+        salary: z.number(),
+        status: z.string(),
+        location: z.string(),
+      }),
+    )
+    .min(10),
 });
 
 // ============================================
@@ -54,14 +58,86 @@ const sampleFormData = {
 const sampleTableData = {
   title: "Engineering Team Directory — Q1 2025",
   rows: [
-    { id: 1, name: "Marcus Johnson", email: "m.johnson@corp.io", department: "Platform", role: "Engineering Manager", salary: 285000, status: "active", location: "San Francisco" },
-    { id: 2, name: "Sarah Kim", email: "s.kim@corp.io", department: "Platform", role: "Staff Engineer", salary: 265000, status: "active", location: "Seattle" },
-    { id: 3, name: "David Martinez", email: "d.martinez@corp.io", department: "Infrastructure", role: "Senior SRE", salary: 195000, status: "active", location: "Austin" },
-    { id: 4, name: "Emily Zhang", email: "e.zhang@corp.io", department: "Frontend", role: "Tech Lead", salary: 245000, status: "active", location: "New York" },
-    { id: 5, name: "James Wilson", email: "j.wilson@corp.io", department: "Backend", role: "Senior Engineer", salary: 185000, status: "active", location: "Denver" },
-    { id: 6, name: "Priya Patel", email: "p.patel@corp.io", department: "Data", role: "ML Engineer", salary: 215000, status: "pending", location: "Boston" },
-    { id: 7, name: "Michael Brown", email: "m.brown@corp.io", department: "Security", role: "Security Engineer", salary: 205000, status: "active", location: "Remote" },
-    { id: 8, name: "Lisa Anderson", email: "l.anderson@corp.io", department: "Mobile", role: "iOS Lead", salary: 225000, status: "active", location: "Los Angeles" },
+    {
+      id: 1,
+      name: "Marcus Johnson",
+      email: "m.johnson@corp.io",
+      department: "Platform",
+      role: "Engineering Manager",
+      salary: 285000,
+      status: "active",
+      location: "San Francisco",
+    },
+    {
+      id: 2,
+      name: "Sarah Kim",
+      email: "s.kim@corp.io",
+      department: "Platform",
+      role: "Staff Engineer",
+      salary: 265000,
+      status: "active",
+      location: "Seattle",
+    },
+    {
+      id: 3,
+      name: "David Martinez",
+      email: "d.martinez@corp.io",
+      department: "Infrastructure",
+      role: "Senior SRE",
+      salary: 195000,
+      status: "active",
+      location: "Austin",
+    },
+    {
+      id: 4,
+      name: "Emily Zhang",
+      email: "e.zhang@corp.io",
+      department: "Frontend",
+      role: "Tech Lead",
+      salary: 245000,
+      status: "active",
+      location: "New York",
+    },
+    {
+      id: 5,
+      name: "James Wilson",
+      email: "j.wilson@corp.io",
+      department: "Backend",
+      role: "Senior Engineer",
+      salary: 185000,
+      status: "active",
+      location: "Denver",
+    },
+    {
+      id: 6,
+      name: "Priya Patel",
+      email: "p.patel@corp.io",
+      department: "Data",
+      role: "ML Engineer",
+      salary: 215000,
+      status: "pending",
+      location: "Boston",
+    },
+    {
+      id: 7,
+      name: "Michael Brown",
+      email: "m.brown@corp.io",
+      department: "Security",
+      role: "Security Engineer",
+      salary: 205000,
+      status: "active",
+      location: "Remote",
+    },
+    {
+      id: 8,
+      name: "Lisa Anderson",
+      email: "l.anderson@corp.io",
+      department: "Mobile",
+      role: "iOS Lead",
+      salary: 225000,
+      status: "active",
+      location: "Los Angeles",
+    },
   ],
 };
 
@@ -71,13 +147,13 @@ const sampleTableData = {
 
 type StreamCallback = (chunk: string) => void;
 
-function createDualStream(data: object, chunkSize = 15, delayMs = 80) {
+function createDualStream(data: object, chunkSize = 10, delayMs = 500) {
   const json = JSON.stringify(data);
   let aborted = false;
 
   const start = async (onChunk: StreamCallback, onComplete: () => void) => {
     for (let i = 0; i < json.length && !aborted; i += chunkSize) {
-      await new Promise(r => setTimeout(r, delayMs));
+      await new Promise((r) => setTimeout(r, delayMs));
       if (!aborted) {
         onChunk(json.slice(i, i + chunkSize));
       }
@@ -85,47 +161,58 @@ function createDualStream(data: object, chunkSize = 15, delayMs = 80) {
     if (!aborted) onComplete();
   };
 
-  const abort = () => { aborted = true; };
+  const abort = () => {
+    aborted = true;
+  };
 
   // Also return as AsyncIterable for the hook
   const asyncIterable: AsyncIterable<string> = {
     async *[Symbol.asyncIterator]() {
       for (let i = 0; i < json.length; i += chunkSize) {
-        await new Promise(r => setTimeout(r, delayMs));
+        await new Promise((r) => setTimeout(r, delayMs));
         yield json.slice(i, i + chunkSize);
       }
-    }
+    },
   };
 
-  return { start, abort, asyncIterable, totalChunks: Math.ceil(json.length / chunkSize) };
+  return {
+    start,
+    abort,
+    asyncIterable,
+    totalChunks: Math.ceil(json.length / chunkSize),
+  };
 }
 
 // ============================================
-// WITHOUT HOOK - Shows the Problems
+// WITHOUT HOOK -
 // ============================================
 
-function FormWithoutHook({ stream }: { stream: { start: Function; abort: Function } | null }) {
+function FormWithoutHook({
+  stream,
+}: {
+  stream: { start: Function; abort: Function } | null;
+}) {
   const [data, setData] = useState<any>(null);
   const [isStreaming, setIsStreaming] = useState(false);
   const [jsonError, setJsonError] = useState<string | null>(null);
-  const [partialJson, setPartialJson] = useState<string>('');
+  const [partialJson, setPartialJson] = useState<string>("");
   const [heightChanges, setHeightChanges] = useState(0);
   const parserRef = useRef(createIncrementalParser());
   const partialDataRef = useRef<any>({});
   const contentRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef(0);
-  const accumulatedJsonRef = useRef('');
+  const accumulatedJsonRef = useRef("");
 
   useEffect(() => {
     if (!stream) return;
 
     parserRef.current = createIncrementalParser();
     partialDataRef.current = {};
-    accumulatedJsonRef.current = '';
+    accumulatedJsonRef.current = "";
     setData(null);
     setIsStreaming(true);
     setJsonError(null);
-    setPartialJson('');
+    setPartialJson("");
     setHeightChanges(0);
     lastHeightRef.current = 0;
 
@@ -158,8 +245,11 @@ function FormWithoutHook({ stream }: { stream: { start: Function; abort: Functio
         // Track height changes (CLS)
         if (contentRef.current) {
           const newHeight = contentRef.current.offsetHeight;
-          if (lastHeightRef.current > 0 && newHeight !== lastHeightRef.current) {
-            setHeightChanges(c => c + 1);
+          if (
+            lastHeightRef.current > 0 &&
+            newHeight !== lastHeightRef.current
+          ) {
+            setHeightChanges((c) => c + 1);
           }
           lastHeightRef.current = newHeight;
         }
@@ -167,7 +257,7 @@ function FormWithoutHook({ stream }: { stream: { start: Function; abort: Functio
       () => {
         setIsStreaming(false);
         setJsonError(null);
-      }
+      },
     );
 
     return () => stream.abort();
@@ -180,48 +270,67 @@ function FormWithoutHook({ stream }: { stream: { start: Function; abort: Functio
         <span className="label">Standard JSON.parse + manual state</span>
       </div>
 
-      {jsonError && isStreaming && (
-        <div className="json-error">
-          <div className="json-error-title">
-            <span>⚠️</span>
-            <span>JSON.parse() fails on incomplete data</span>
-          </div>
-          <div>{jsonError}</div>
-          <div className="json-partial">{partialJson.slice(-100)}...</div>
-        </div>
-      )}
-
       <div className="form-content" ref={contentRef}>
         {/* Fields appear one by one - LAYOUT SHIFT! */}
         {data?.firstName !== undefined && (
-          <div className="field"><label>First Name</label><div className="value">{data.firstName}</div></div>
+          <div className="field">
+            <label>First Name</label>
+            <div className="value">{data.firstName}</div>
+          </div>
         )}
         {data?.lastName !== undefined && (
-          <div className="field"><label>Last Name</label><div className="value">{data.lastName}</div></div>
+          <div className="field">
+            <label>Last Name</label>
+            <div className="value">{data.lastName}</div>
+          </div>
         )}
         {data?.email !== undefined && (
-          <div className="field"><label>Email</label><div className="value">{data.email}</div></div>
+          <div className="field">
+            <label>Email</label>
+            <div className="value">{data.email}</div>
+          </div>
         )}
         {data?.phone !== undefined && (
-          <div className="field"><label>Phone</label><div className="value">{data.phone}</div></div>
+          <div className="field">
+            <label>Phone</label>
+            <div className="value">{data.phone}</div>
+          </div>
         )}
         {data?.department !== undefined && (
-          <div className="field"><label>Department</label><div className="value">{data.department}</div></div>
+          <div className="field">
+            <label>Department</label>
+            <div className="value">{data.department}</div>
+          </div>
         )}
         {data?.jobTitle !== undefined && (
-          <div className="field"><label>Job Title</label><div className="value">{data.jobTitle}</div></div>
+          <div className="field">
+            <label>Job Title</label>
+            <div className="value">{data.jobTitle}</div>
+          </div>
         )}
         {data?.salary !== undefined && (
-          <div className="field"><label>Salary</label><div className="value">${data.salary?.toLocaleString()}</div></div>
+          <div className="field">
+            <label>Salary</label>
+            <div className="value">${data.salary?.toLocaleString()}</div>
+          </div>
         )}
         {data?.startDate !== undefined && (
-          <div className="field"><label>Start Date</label><div className="value">{data.startDate}</div></div>
+          <div className="field">
+            <label>Start Date</label>
+            <div className="value">{data.startDate}</div>
+          </div>
         )}
         {data?.isActive !== undefined && (
-          <div className="field"><label>Status</label><div className="value">{data.isActive ? 'Active' : 'Inactive'}</div></div>
+          <div className="field">
+            <label>Status</label>
+            <div className="value">{data.isActive ? "Active" : "Inactive"}</div>
+          </div>
         )}
         {data?.bio !== undefined && (
-          <div className="field"><label>Bio</label><div className="value">{data.bio}</div></div>
+          <div className="field">
+            <label>Bio</label>
+            <div className="value">{data.bio}</div>
+          </div>
         )}
         {!data && !isStreaming && (
           <div className="empty-state">Click "Stream Demo" to start</div>
@@ -234,11 +343,15 @@ function FormWithoutHook({ stream }: { stream: { start: Function; abort: Functio
       <div className="stats-bar">
         <div className="stat">
           <span>Layout Shifts:</span>
-          <span className={`stat-value ${heightChanges > 0 ? 'error' : ''}`}>{heightChanges}</span>
+          <span className={`stat-value ${heightChanges > 0 ? "error" : ""}`}>
+            {heightChanges}
+          </span>
         </div>
         <div className="stat">
           <span>Fields Visible:</span>
-          <span className="stat-value">{data ? Object.keys(data).length : 0}/10</span>
+          <span className="stat-value">
+            {data ? Object.keys(data).length : 0}/10
+          </span>
         </div>
       </div>
     </div>
@@ -255,7 +368,9 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
     source: stream,
   });
 
-  const filledFields = Object.values(data).filter(v => v !== '' && v !== 0 && v !== false).length;
+  const filledFields = Object.values(data).filter(
+    (v) => v !== "" && v !== 0 && v !== false,
+  ).length;
 
   return (
     <div className="panel with">
@@ -265,16 +380,72 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
       </div>
       <div className="form-content">
         {/* All fields always present - NO LAYOUT SHIFT! */}
-        <div className="field"><label>First Name</label><div className={`value ${!data.firstName ? 'skeleton' : ''}`}>{data.firstName || '...'}</div></div>
-        <div className="field"><label>Last Name</label><div className={`value ${!data.lastName ? 'skeleton' : ''}`}>{data.lastName || '...'}</div></div>
-        <div className="field"><label>Email</label><div className={`value ${!data.email ? 'skeleton' : ''}`}>{data.email || '...'}</div></div>
-        <div className="field"><label>Phone</label><div className={`value ${!data.phone ? 'skeleton' : ''}`}>{data.phone || '...'}</div></div>
-        <div className="field"><label>Department</label><div className={`value ${!data.department ? 'skeleton' : ''}`}>{data.department || '...'}</div></div>
-        <div className="field"><label>Job Title</label><div className={`value ${!data.jobTitle ? 'skeleton' : ''}`}>{data.jobTitle || '...'}</div></div>
-        <div className="field"><label>Salary</label><div className={`value ${!data.salary ? 'skeleton' : ''}`}>{data.salary ? `$${data.salary.toLocaleString()}` : '...'}</div></div>
-        <div className="field"><label>Start Date</label><div className={`value ${!data.startDate ? 'skeleton' : ''}`}>{data.startDate || '...'}</div></div>
-        <div className="field"><label>Status</label><div className={`value ${data.isActive === false ? '' : !data.isActive ? 'skeleton' : ''}`}>{data.isActive ? 'Active' : (data.isActive === false ? 'Inactive' : '...')}</div></div>
-        <div className="field"><label>Bio</label><div className={`value ${!data.bio ? 'skeleton' : ''}`}>{data.bio || '...'}</div></div>
+        <div className="field">
+          <label>First Name</label>
+          <div className={`value ${!data.firstName ? "skeleton" : ""}`}>
+            {data.firstName || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Last Name</label>
+          <div className={`value ${!data.lastName ? "skeleton" : ""}`}>
+            {data.lastName || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Email</label>
+          <div className={`value ${!data.email ? "skeleton" : ""}`}>
+            {data.email || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Phone</label>
+          <div className={`value ${!data.phone ? "skeleton" : ""}`}>
+            {data.phone || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Department</label>
+          <div className={`value ${!data.department ? "skeleton" : ""}`}>
+            {data.department || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Job Title</label>
+          <div className={`value ${!data.jobTitle ? "skeleton" : ""}`}>
+            {data.jobTitle || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Salary</label>
+          <div className={`value ${!data.salary ? "skeleton" : ""}`}>
+            {data.salary ? `$${data.salary.toLocaleString()}` : "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Start Date</label>
+          <div className={`value ${!data.startDate ? "skeleton" : ""}`}>
+            {data.startDate || "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Status</label>
+          <div
+            className={`value ${data.isActive === false ? "" : !data.isActive ? "skeleton" : ""}`}
+          >
+            {data.isActive
+              ? "Active"
+              : data.isActive === false
+                ? "Inactive"
+                : "..."}
+          </div>
+        </div>
+        <div className="field">
+          <label>Bio</label>
+          <div className={`value ${!data.bio ? "skeleton" : ""}`}>
+            {data.bio || "..."}
+          </div>
+        </div>
       </div>
 
       <div className="stats-bar">
@@ -288,7 +459,9 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
         </div>
         <div className="stat">
           <span>State:</span>
-          <span className="stat-value">{isComplete ? 'Complete' : isStreaming ? 'Streaming...' : 'Idle'}</span>
+          <span className="stat-value">
+            {isComplete ? "Complete" : isStreaming ? "Streaming..." : "Idle"}
+          </span>
         </div>
       </div>
     </div>
@@ -299,9 +472,13 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
 // Table WITHOUT Hook
 // ============================================
 
-function TableWithoutHook({ stream }: { stream: { start: Function; abort: Function } | null }) {
+function TableWithoutHook({
+  stream,
+}: {
+  stream: { start: Function; abort: Function } | null;
+}) {
   const [rows, setRows] = useState<any[]>([]);
-  const [title, setTitle] = useState<string>('');
+  const [title, setTitle] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [heightChanges, setHeightChanges] = useState(0);
   const parserRef = useRef(createIncrementalParser());
@@ -313,7 +490,7 @@ function TableWithoutHook({ stream }: { stream: { start: Function; abort: Functi
 
     parserRef.current = createIncrementalParser();
     setRows([]);
-    setTitle('');
+    setTitle("");
     setIsStreaming(true);
     setHeightChanges(0);
     lastHeightRef.current = 0;
@@ -324,9 +501,9 @@ function TableWithoutHook({ stream }: { stream: { start: Function; abort: Functi
       (chunk: string) => {
         const parsed = parserRef.current.process(chunk);
         for (const { path, value } of parsed) {
-          if (path === 'title') {
+          if (path === "title") {
             setTitle(value as string);
-          } else if (path.startsWith('rows[')) {
+          } else if (path.startsWith("rows[")) {
             const match = path.match(/rows\[(\d+)\]\.?(.+)?/);
             if (match) {
               const idx = parseInt(match[1]);
@@ -345,13 +522,16 @@ function TableWithoutHook({ stream }: { stream: { start: Function; abort: Functi
         // Track height changes
         if (contentRef.current) {
           const newHeight = contentRef.current.offsetHeight;
-          if (lastHeightRef.current > 0 && newHeight !== lastHeightRef.current) {
-            setHeightChanges(c => c + 1);
+          if (
+            lastHeightRef.current > 0 &&
+            newHeight !== lastHeightRef.current
+          ) {
+            setHeightChanges((c) => c + 1);
           }
           lastHeightRef.current = newHeight;
         }
       },
-      () => setIsStreaming(false)
+      () => setIsStreaming(false),
     );
 
     return () => stream.abort();
@@ -364,7 +544,9 @@ function TableWithoutHook({ stream }: { stream: { start: Function; abort: Functi
         <span className="label">Rows appear suddenly, layout jumps</span>
       </div>
       <div className="table-content" ref={contentRef}>
-        <p className="table-title">{title || (isStreaming ? 'Loading title...' : 'Click "Stream Demo"')}</p>
+        <p className="table-title">
+          {title || (isStreaming ? "Loading title..." : 'Click "Stream Demo"')}
+        </p>
         <div className="table-wrapper">
           <table>
             <thead>
@@ -382,23 +564,39 @@ function TableWithoutHook({ stream }: { stream: { start: Function; abort: Functi
               {rows.map((row, i) => (
                 <tr key={i}>
                   <td>{row.id}</td>
-                  <td>{row.name || '...'}</td>
-                  <td>{row.department || '...'}</td>
-                  <td>{row.role || '...'}</td>
-                  <td>{row.location || '...'}</td>
-                  <td className="salary">{row.salary ? `$${(row.salary / 1000).toFixed(0)}k` : '...'}</td>
-                  <td>{row.status ? <span className={`status-badge ${row.status}`}>{row.status}</span> : '...'}</td>
+                  <td>{row.name || "..."}</td>
+                  <td>{row.department || "..."}</td>
+                  <td>{row.role || "..."}</td>
+                  <td>{row.location || "..."}</td>
+                  <td className="salary">
+                    {row.salary ? `$${(row.salary / 1000).toFixed(0)}k` : "..."}
+                  </td>
+                  <td>
+                    {row.status ? (
+                      <span className={`status-badge ${row.status}`}>
+                        {row.status}
+                      </span>
+                    ) : (
+                      "..."
+                    )}
+                  </td>
                 </tr>
               ))}
               {rows.length === 0 && (
-                <tr><td colSpan={7} className="empty-row">{isStreaming ? 'Waiting for rows...' : 'No data'}</td></tr>
+                <tr>
+                  <td colSpan={7} className="empty-row">
+                    {isStreaming ? "Waiting for rows..." : "No data"}
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
         <p className="row-count">
           <span>{rows.length} rows loaded</span>
-          {heightChanges > 0 && <span className="highlight">• {heightChanges} layout shifts!</span>}
+          {heightChanges > 0 && (
+            <span className="highlight">• {heightChanges} layout shifts!</span>
+          )}
         </p>
       </div>
     </div>
@@ -415,7 +613,7 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
     source: stream,
   });
 
-  const filledRows = data.rows.filter(r => r.name).length;
+  const filledRows = data.rows.filter((r) => r.name).length;
 
   return (
     <div className="panel with">
@@ -424,7 +622,7 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
         <span className="label">10 skeleton rows ready, smooth fill</span>
       </div>
       <div className="table-content">
-        <p className="table-title">{data.title || 'Loading...'}</p>
+        <p className="table-title">{data.title || "Loading..."}</p>
         <div className="table-wrapper">
           <table>
             <thead>
@@ -442,14 +640,26 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
               {data.rows.map((row, i) => {
                 const isSkeleton = !row.name;
                 return (
-                  <tr key={i} className={isSkeleton ? 'skeleton-row' : ''}>
-                    <td>{row.id || '—'}</td>
-                    <td>{row.name || '...'}</td>
-                    <td>{row.department || '...'}</td>
-                    <td>{row.role || '...'}</td>
-                    <td>{row.location || '...'}</td>
-                    <td className="salary">{row.salary ? `$${(row.salary / 1000).toFixed(0)}k` : '...'}</td>
-                    <td>{row.status ? <span className={`status-badge ${row.status}`}>{row.status}</span> : '...'}</td>
+                  <tr key={i} className={isSkeleton ? "skeleton-row" : ""}>
+                    <td>{row.id || "—"}</td>
+                    <td>{row.name || "..."}</td>
+                    <td>{row.department || "..."}</td>
+                    <td>{row.role || "..."}</td>
+                    <td>{row.location || "..."}</td>
+                    <td className="salary">
+                      {row.salary
+                        ? `$${(row.salary / 1000).toFixed(0)}k`
+                        : "..."}
+                    </td>
+                    <td>
+                      {row.status ? (
+                        <span className={`status-badge ${row.status}`}>
+                          {row.status}
+                        </span>
+                      ) : (
+                        "..."
+                      )}
+                    </td>
                   </tr>
                 );
               })}
@@ -457,10 +667,19 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
           </table>
         </div>
         <p className="row-count">
-          {isComplete
-            ? <><span className="highlight">{filledRows} rows</span> loaded (skeleton trimmed)</>
-            : <><span>{filledRows}/{data.rows.length}</span> rows filled • <span className="highlight">0 layout shifts</span></>
-          }
+          {isComplete ? (
+            <>
+              <span className="highlight">{filledRows} rows</span> loaded
+              (skeleton trimmed)
+            </>
+          ) : (
+            <>
+              <span>
+                {filledRows}/{data.rows.length}
+              </span>{" "}
+              rows filled • <span className="highlight">0 layout shifts</span>
+            </>
+          )}
         </p>
       </div>
     </div>
@@ -472,8 +691,12 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
 // ============================================
 
 export default function App() {
-  const [formStream, setFormStream] = useState<ReturnType<typeof createDualStream> | null>(null);
-  const [tableStream, setTableStream] = useState<ReturnType<typeof createDualStream> | null>(null);
+  const [formStream, setFormStream] = useState<ReturnType<
+    typeof createDualStream
+  > | null>(null);
+  const [tableStream, setTableStream] = useState<ReturnType<
+    typeof createDualStream
+  > | null>(null);
   const [isRunning, setIsRunning] = useState(false);
 
   const runFormComparison = () => {
@@ -494,13 +717,20 @@ export default function App() {
     <div className="app">
       <header>
         <h1>stable-stream</h1>
-        <p>Stream structured JSON from LLMs with zero layout shift. See the difference side-by-side.</p>
+        <p>
+          Stream structured JSON from LLMs with zero layout shift. See the
+          difference side-by-side.
+        </p>
       </header>
 
       <section className="demo-section">
         <div className="section-header">
           <h2>Form Streaming</h2>
-          <button className="run-btn" onClick={runFormComparison} disabled={isRunning}>
+          <button
+            className="run-btn"
+            onClick={runFormComparison}
+            disabled={isRunning}
+          >
             Stream Demo
           </button>
         </div>
@@ -513,7 +743,11 @@ export default function App() {
       <section className="demo-section">
         <div className="section-header">
           <h2>Table Streaming</h2>
-          <button className="run-btn" onClick={runTableComparison} disabled={isRunning}>
+          <button
+            className="run-btn"
+            onClick={runTableComparison}
+            disabled={isRunning}
+          >
             Stream Demo
           </button>
         </div>
