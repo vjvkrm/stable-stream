@@ -284,6 +284,14 @@ export function createIncrementalParser(): IncrementalParser {
                   value: parseValue(state.arrayItemBuffer.trim(), state.arrayItemType),
                   path,
                 });
+              } else if (state.arrayIndex === 0) {
+                // Empty array should still emit once so downstream can trim skeleton rows.
+                const path = [...state.currentPath, state.currentKey].join('.');
+                results.push({
+                  key: state.currentKey,
+                  value: [],
+                  path,
+                });
               }
 
               // Exit array mode

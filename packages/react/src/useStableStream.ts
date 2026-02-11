@@ -1,6 +1,11 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { z } from 'zod';
-import { createStableStream, hydrate, type HydrateOptions } from '@stable-stream/core';
+import {
+  createStableStream,
+  hydrate,
+  type HydrateOptions,
+  type StreamCompletionReason,
+} from '@stable-stream/core';
 
 export interface UseStableStreamOptions<T extends z.ZodTypeAny> {
   /** Zod schema defining the expected shape */
@@ -24,6 +29,10 @@ export interface UseStableStreamResult<T> {
   isStreaming: boolean;
   /** True when stream has finished successfully */
   isComplete: boolean;
+  /** True when stream ended with incomplete JSON or errored before full completion */
+  isPartial: boolean;
+  /** Machine-readable completion status for diagnostics */
+  completionReason: StreamCompletionReason | null;
   /** Error if stream failed */
   error: Error | null;
   /** Paths that changed in the last update */
@@ -37,6 +46,8 @@ interface StreamState<T> {
   data: T;
   isStreaming: boolean;
   isComplete: boolean;
+  isPartial: boolean;
+  completionReason: StreamCompletionReason | null;
   error: Error | null;
   changedPaths: string[];
 }
@@ -81,6 +92,8 @@ export function useStableStream<T extends z.ZodTypeAny>(
     data: initialSkeleton,
     isStreaming: false,
     isComplete: false,
+    isPartial: false,
+    completionReason: null,
     error: null,
     changedPaths: [],
   }));
@@ -98,27 +111,36 @@ export function useStableStream<T extends z.ZodTypeAny>(
   // Pending data for RAF throttling
   const pendingUpdateRef = useRef<Partial<StreamState<z.infer<T>>> | null>(null);
 
+  const clearPendingFrame = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    pendingUpdateRef.current = null;
+  }, []);
+
   const reset = useCallback(() => {
+    clearPendingFrame();
     const skeleton = hydrate(schema, hydrateOptions);
     setState({
       data: skeleton,
       isStreaming: false,
       isComplete: false,
+      isPartial: false,
+      completionReason: null,
       error: null,
       changedPaths: [],
     });
-  }, [schema, hydrateOptions]);
+  }, [schema, hydrateOptions, clearPendingFrame]);
 
   // Cleanup on unmount
   useEffect(() => {
     mountedRef.current = true;
     return () => {
       mountedRef.current = false;
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-      }
+      clearPendingFrame();
     };
-  }, []);
+  }, [clearPendingFrame]);
 
   // Main streaming effect
   useEffect(() => {
@@ -133,6 +155,8 @@ export function useStableStream<T extends z.ZodTypeAny>(
       data: skeleton,
       isStreaming: true,
       isComplete: false,
+      isPartial: false,
+      completionReason: null,
       error: null,
       changedPaths: [],
     });
@@ -151,10 +175,13 @@ export function useStableStream<T extends z.ZodTypeAny>(
           if (aborted || !mountedRef.current) break;
 
           if (update.state === 'error' && update.error) {
+            clearPendingFrame();
             setState(prev => ({
               ...prev,
               error: update.error!,
               isStreaming: false,
+              isPartial: update.isPartial,
+              completionReason: update.completionReason,
             }));
             onErrorRef.current?.(update.error);
             break;
@@ -162,10 +189,13 @@ export function useStableStream<T extends z.ZodTypeAny>(
 
           if (update.state === 'complete') {
             // Final update - bypass throttle, ensure data is set
+            clearPendingFrame();
             setState({
               data: update.data,
               isStreaming: false,
               isComplete: true,
+              isPartial: update.isPartial,
+              completionReason: update.completionReason,
               error: null,
               changedPaths: [],
             });
@@ -177,6 +207,8 @@ export function useStableStream<T extends z.ZodTypeAny>(
           if (throttle) {
             pendingUpdateRef.current = {
               data: update.data,
+              isPartial: update.isPartial,
+              completionReason: update.completionReason,
               changedPaths: update.changedPaths,
             };
 
@@ -196,6 +228,8 @@ export function useStableStream<T extends z.ZodTypeAny>(
             setState(prev => ({
               ...prev,
               data: update.data,
+              isPartial: update.isPartial,
+              completionReason: update.completionReason,
               changedPaths: update.changedPaths,
             }));
           }
@@ -203,11 +237,14 @@ export function useStableStream<T extends z.ZodTypeAny>(
       } catch (err) {
         if (aborted || !mountedRef.current) return;
 
+        clearPendingFrame();
         const error = err instanceof Error ? err : new Error(String(err));
         setState(prev => ({
           ...prev,
           error,
           isStreaming: false,
+          isPartial: true,
+          completionReason: 'source_error',
         }));
         onErrorRef.current?.(error);
       }
@@ -217,17 +254,16 @@ export function useStableStream<T extends z.ZodTypeAny>(
 
     return () => {
       aborted = true;
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = null;
-      }
+      clearPendingFrame();
     };
-  }, [source, schema, hydrateOptions, throttle]); // Note: callbacks removed from deps
+  }, [source, schema, hydrateOptions, throttle, clearPendingFrame]); // Note: callbacks removed from deps
 
   return {
     data: state.data,
     isStreaming: state.isStreaming,
     isComplete: state.isComplete,
+    isPartial: state.isPartial,
+    completionReason: state.completionReason,
     error: state.error,
     changedPaths: state.changedPaths,
     reset,

@@ -156,6 +156,7 @@ describe("Integration Tests", () => {
 
       // Note: With small chunk size, we might see partial rows
       // This test just verifies streaming works
+      expect(sawPartialRow).toBeDefined();
     });
   });
 

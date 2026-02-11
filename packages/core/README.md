@@ -34,6 +34,13 @@ for await (const { data, state, changedPaths } of createStableStream({
 }
 ```
 
+## Input Contract
+
+`createStableStream` expects the stream to contain a **top-level JSON object**.
+
+- Supported: `{"user":{"name":"Alice"},"items":[...]}`
+- Not supported: `["a","b"]` (root-level arrays)
+
 ## Why This Exists
 
 When streaming structured JSON from LLMs, you face these problems:
@@ -122,6 +129,8 @@ interface StableStreamOptions<T extends z.ZodTypeAny> {
 interface StreamUpdate<T> {
   data: T;                  // Current merged data (always complete shape)
   state: StreamState;       // "streaming" | "complete" | "error"
+  isPartial: boolean;       // True if stream ended incomplete or errored
+  completionReason: StreamCompletionReason; // "streaming" | "complete" | "incomplete_json" | "source_error"
   changedPaths: string[];   // Paths that changed: ["name", "items[0].price"]
   error?: Error;            // Error if state is "error"
 }
@@ -142,7 +151,7 @@ const ProductSchema = z.object({
 });
 
 async function streamProduct(textStream: AsyncIterable<string>) {
-  for await (const { data, state, changedPaths } of createStableStream({
+  for await (const { data, state, isPartial, completionReason, changedPaths } of createStableStream({
     schema: ProductSchema,
     source: textStream,
   })) {
@@ -152,7 +161,7 @@ async function streamProduct(textStream: AsyncIterable<string>) {
     }
 
     if (state === "complete") {
-      console.log("Done:", data);
+      console.log("Done:", data, { isPartial, completionReason });
     }
 
     if (state === "error") {
@@ -177,6 +186,8 @@ const data = await consumeStableStream({
 });
 // data is fully typed as z.infer<typeof UserSchema>
 ```
+
+Note: `consumeStableStream` remains lenient. If JSON is truncated but no source error is thrown, it returns best-effort hydrated data. Use `createStableStream` when you need `isPartial` / `completionReason` diagnostics.
 
 ---
 
@@ -213,7 +224,7 @@ const skeleton = hydrate(schema);
 
 ```typescript
 interface HydrateOptions {
-  maxDepth?: number;  // Limit recursion depth (default: 10)
+  maxDepth?: number;  // Limit recursion depth (default: 3)
 }
 ```
 
@@ -224,7 +235,7 @@ interface HydrateOptions {
 | `z.string()` | `""` |
 | `z.number()` | `0` |
 | `z.boolean()` | `false` |
-| `z.date()` | `new Date(0)` |
+| `z.date()` | `new Date()` |
 | `z.null()` | `null` |
 | `z.undefined()` | `undefined` |
 | `z.array()` | `[]` |

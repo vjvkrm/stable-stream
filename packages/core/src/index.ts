@@ -12,4 +12,9 @@ export type { MergeResult } from "./merge";
 
 // Stream
 export { createStableStream, consumeStableStream } from "./stream";
-export type { StreamState, StreamUpdate, StableStreamOptions } from "./stream";
+export type {
+  StreamState,
+  StreamCompletionReason,
+  StreamUpdate,
+  StableStreamOptions,
+} from "./stream";

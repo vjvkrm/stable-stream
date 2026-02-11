@@ -325,10 +325,11 @@ describe('IncrementalParser', () => {
       expect(results[1]).toEqual({ key: 'tags', value: 'b', path: 'tags[1]' });
     });
 
-    it('empty array emits nothing', () => {
+    it('empty array emits a complete array value', () => {
       const parser = createIncrementalParser();
       const results = parser.process('{"tags": []}');
-      expect(results).toHaveLength(0);
+      expect(results).toHaveLength(1);
+      expect(results[0]).toEqual({ key: 'tags', value: [], path: 'tags' });
     });
 
     it('emits complete items, holds incomplete', () => {

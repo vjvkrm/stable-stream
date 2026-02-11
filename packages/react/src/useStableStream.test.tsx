@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { z } from 'zod';
 import { useStableStream } from './useStableStream';
 
@@ -24,6 +24,8 @@ describe('useStableStream', () => {
     expect(result.current.data).toEqual({ name: '', age: 0 });
     expect(result.current.isStreaming).toBe(false);
     expect(result.current.isComplete).toBe(false);
+    expect(result.current.isPartial).toBe(false);
+    expect(result.current.completionReason).toBe(null);
     expect(result.current.error).toBe(null);
   });
 
@@ -59,5 +61,108 @@ describe('useStableStream', () => {
     }, { timeout: 5000 });
 
     expect(result.current.data.name).toBe('John');
+    expect(result.current.isPartial).toBe(false);
+    expect(result.current.completionReason).toBe('complete');
+  });
+
+  it('should mark completion as partial for truncated JSON', async () => {
+    const schema = z.object({
+      name: z.string(),
+      email: z.string(),
+    });
+
+    const source = chunksToStream(['{"name":"John"']);
+
+    const { result } = renderHook(() =>
+      useStableStream({ schema, source, throttle: false })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isComplete).toBe(true);
+    }, { timeout: 5000 });
+
+    expect(result.current.error).toBe(null);
+    expect(result.current.isPartial).toBe(true);
+    expect(result.current.completionReason).toBe('incomplete_json');
+    expect(result.current.data).toEqual({ name: 'John', email: '' });
+  });
+
+  it('should expose source errors as partial', async () => {
+    const schema = z.object({
+      name: z.string(),
+    });
+
+    async function* failingStream(): AsyncGenerator<string> {
+      yield '{"name":"Jo';
+      throw new Error('Connection lost');
+    }
+
+    const source = failingStream();
+
+    const { result } = renderHook(() =>
+      useStableStream({ schema, source, throttle: false })
+    );
+
+    for (let i = 0; i < 20 && !result.current.error; i++) {
+      await act(async () => {
+        await Promise.resolve();
+      });
+    }
+
+    expect(result.current.error?.message).toBe('Connection lost');
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.isPartial).toBe(true);
+    expect(result.current.completionReason).toBe('source_error');
+  });
+
+  it('should complete successfully with throttling enabled', async () => {
+    const schema = z.object({
+      name: z.string(),
+    });
+
+    const source = chunksToStream(['{"name":"John"}']);
+
+    const { result } = renderHook(() =>
+      useStableStream({ schema, source, throttle: true })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isComplete).toBe(true);
+    }, { timeout: 5000 });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.isPartial).toBe(false);
+    expect(result.current.completionReason).toBe('complete');
+    expect(result.current.data.name).toBe('John');
+  });
+
+  it('reset should clear completion diagnostics', async () => {
+    const schema = z.object({
+      name: z.string(),
+      email: z.string(),
+    });
+
+    const source = chunksToStream(['{"name":"John"']);
+
+    const { result } = renderHook(() =>
+      useStableStream({ schema, source, throttle: false })
+    );
+
+    await waitFor(() => {
+      expect(result.current.isComplete).toBe(true);
+    }, { timeout: 5000 });
+
+    expect(result.current.isPartial).toBe(true);
+    expect(result.current.completionReason).toBe('incomplete_json');
+
+    act(() => {
+      result.current.reset();
+    });
+
+    expect(result.current.isStreaming).toBe(false);
+    expect(result.current.isComplete).toBe(false);
+    expect(result.current.isPartial).toBe(false);
+    expect(result.current.completionReason).toBe(null);
+    expect(result.current.data).toEqual({ name: '', email: '' });
   });
 });

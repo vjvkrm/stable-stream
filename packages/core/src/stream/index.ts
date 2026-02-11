@@ -7,16 +7,28 @@
 
 import { z } from "zod";
 import { hydrate, type HydrateOptions } from "../hydrate";
-import { createIncrementalParser } from "../parser";
+import { createIncrementalParser, type ParserState } from "../parser";
 import { applyParsedValue, trimSkeleton } from "../merge";
 
 export type StreamState = "streaming" | "complete" | "error";
+export type StreamCompletionReason =
+  | "streaming"
+  | "complete"
+  | "incomplete_json"
+  | "source_error";
 
 export interface StreamUpdate<T> {
   /** Current merged data (always complete skeleton shape) */
   data: T;
   /** Stream state */
   state: StreamState;
+  /**
+   * True when stream ended without a fully closed/valid JSON object
+   * or when an error interrupted the stream.
+   */
+  isPartial: boolean;
+  /** Machine-readable completion status for diagnostics. */
+  completionReason: StreamCompletionReason;
   /** Paths that changed in this update */
   changedPaths: string[];
   /** Error if state is "error" */
@@ -62,10 +74,20 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
 
   // Track array lengths for trimming on completion
   const arrayLengths = new Map<string, number>();
+  // Validate stream root token once we see the first non-whitespace character.
+  let rootTokenValidated = false;
 
   try {
     // 3. Process each chunk
     for await (const chunk of source) {
+      if (!rootTokenValidated) {
+        const rootToken = getFirstNonWhitespaceChar(chunk);
+        if (rootToken !== null) {
+          assertObjectRootToken(rootToken);
+          rootTokenValidated = true;
+        }
+      }
+
       const parsedValues = parser.process(chunk);
 
       if (parsedValues.length === 0) {
@@ -77,15 +99,15 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
       const allChangedPaths: string[] = [];
 
       for (const { path, value } of parsedValues) {
+        // Track array lengths from parsed indices even if value equals skeleton default.
+        trackArrayLength(path, arrayLengths);
+
         const result = applyParsedValue(data, path, value);
 
         if (result.changed) {
           data = result.data;
           anyChanged = true;
           allChangedPaths.push(...result.changedPaths);
-
-          // Track array lengths for trimming
-          trackArrayLength(path, arrayLengths);
         }
       }
 
@@ -94,6 +116,8 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
         const update: StreamUpdate<z.infer<T>> = {
           data,
           state: "streaming",
+          isPartial: false,
+          completionReason: "streaming",
           changedPaths: allChangedPaths,
         };
 
@@ -105,12 +129,17 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
       }
     }
 
+    const parserState = parser.getState();
+    const incompleteJson = isJsonIncomplete(parserState);
+
     // 6. Stream complete - trim unfilled skeleton items
     data = trimSkeleton(data, arrayLengths);
 
     const finalUpdate: StreamUpdate<z.infer<T>> = {
       data,
       state: "complete",
+      isPartial: incompleteJson,
+      completionReason: incompleteJson ? "incomplete_json" : "complete",
       changedPaths: [],
     };
 
@@ -125,6 +154,8 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
     const errorUpdate: StreamUpdate<z.infer<T>> = {
       data,
       state: "error",
+      isPartial: true,
+      completionReason: "source_error",
       changedPaths: [],
       error,
     };
@@ -135,6 +166,41 @@ export async function* createStableStream<T extends z.ZodTypeAny>(
 
     yield errorUpdate;
   }
+}
+
+function isJsonIncomplete(state: ParserState): boolean {
+  return (
+    state.depth > 0 ||
+    state.inString ||
+    state.escaped ||
+    state.expectingValue ||
+    state.valueStarted ||
+    state.nestedDepth > 0 ||
+    state.inArrayValue ||
+    state.arrayItemDepth > 0 ||
+    state.arrayItemBuffer.trim().length > 0
+  );
+}
+
+function getFirstNonWhitespaceChar(chunk: string): string | null {
+  const trimmed = chunk.trimStart();
+  return trimmed.length > 0 ? trimmed[0] : null;
+}
+
+function assertObjectRootToken(token: string): void {
+  if (token === "{") {
+    return;
+  }
+
+  if (token === "[") {
+    throw new Error(
+      'Top-level JSON must be an object (e.g., {"key": value}). Root arrays are not supported.'
+    );
+  }
+
+  throw new Error(
+    `Top-level JSON must be an object (e.g., {"key": value}). Received "${token}" as the first JSON token.`
+  );
 }
 
 /**

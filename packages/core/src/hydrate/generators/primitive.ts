@@ -3,7 +3,7 @@ import { z } from "zod";
 /**
  * Handles basic atoms like strings, numbers, and booleans.
  */
-export function generatePrimitive(typeName: string, schema: z.ZodTypeAny): any {
+export function generatePrimitive(typeName: string, _schema: z.ZodTypeAny): any {
   switch (typeName) {
     case z.ZodFirstPartyTypeKind.ZodString:
       return "";

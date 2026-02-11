@@ -69,6 +69,13 @@ npm install @stable-stream/react zod
 npm install @stable-stream/core zod
 ```
 
+## Input Contract
+
+stable-stream expects a **top-level JSON object** in the streamed text.
+
+- Supported: `{"name":"Alice","items":[...]}`
+- Not supported: `["a","b"]` (root-level arrays)
+
 ## Quick Start
 
 ### React
@@ -225,6 +232,7 @@ for await (const { data, state } of stream) {
 - **Hallucination Protection** — Keys not in schema are discarded
 - **Array Pre-fill** — Use `.min(n)` to pre-render skeleton rows
 - **Skeleton Trimming** — Unfilled array items removed on completion
+- **Partial Completion Signals** — Detect truncated/errored streams via `isPartial` and `completionReason`
 - **60fps Throttling** — React hook uses RAF to limit re-renders
 - **Structural Sharing** — Only changed paths create new references
 
@@ -263,7 +271,7 @@ JSON string chunks: `{"name": "Jo` (incomplete)
 ### React: `useStableStream(options)`
 
 ```typescript
-const { data, isStreaming, isComplete, error, reset } = useStableStream({
+const { data, isStreaming, isComplete, isPartial, completionReason, error, reset } = useStableStream({
   schema: ZodSchema,           // Required: Zod schema
   source: AsyncIterable | null, // JSON string chunks (null = don't start)
   throttle: true,              // Optional: RAF throttling (default: true)
@@ -280,9 +288,11 @@ const stream = createStableStream({
   source: AsyncIterable<string>, // Required: JSON string chunks
 });
 
-for await (const { data, state, changedPaths } of stream) {
+for await (const { data, state, isPartial, completionReason, changedPaths } of stream) {
   // data: T (always complete shape)
   // state: 'streaming' | 'complete' | 'error'
+  // isPartial: boolean
+  // completionReason: 'streaming' | 'complete' | 'incomplete_json' | 'source_error'
   // changedPaths: string[] (paths that changed this update)
 }
 ```

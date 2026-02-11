@@ -129,7 +129,7 @@ function ProductGenerator() {
 ## API
 
 ```typescript
-const { data, isStreaming, isComplete, error, reset } = useStableStream({
+const { data, isStreaming, isComplete, isPartial, completionReason, error, reset } = useStableStream({
   schema,        // Zod schema (required)
   source,        // AsyncIterable<string> | null
   throttle,      // Limit to 60fps (default: true)
@@ -143,6 +143,8 @@ const { data, isStreaming, isComplete, error, reset } = useStableStream({
 | `data` | `z.infer<Schema>` | Always complete shape, fills as stream progresses |
 | `isStreaming` | `boolean` | True while receiving data |
 | `isComplete` | `boolean` | True when finished successfully |
+| `isPartial` | `boolean` | True when stream ended incomplete or errored |
+| `completionReason` | `"streaming" \| "complete" \| "incomplete_json" \| "source_error" \| null` | Diagnostic completion status |
 | `error` | `Error \| null` | Error if stream failed |
 | `reset` | `() => void` | Reset to initial skeleton |
 

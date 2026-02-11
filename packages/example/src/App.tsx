@@ -3,6 +3,8 @@ import { z } from "zod";
 import { useStableStream } from "@stable-stream/react";
 import { createIncrementalParser } from "@stable-stream/core";
 
+type DemoScenario = "normal" | "hallucinations" | "truncated" | "source_error";
+
 // ============================================
 // Schemas
 // ============================================
@@ -147,18 +149,58 @@ const sampleTableData = {
 
 type StreamCallback = (chunk: string) => void;
 
-function createDualStream(data: object, chunkSize = 10, delayMs = 500) {
-  const json = JSON.stringify(data);
+type StreamStart = (
+  onChunk: StreamCallback,
+  onComplete: () => void,
+  onError?: (err: Error) => void,
+) => Promise<void>;
+
+function injectHallucinations(data: object): object {
+  return {
+    ...data,
+    admin: true,
+    debug: {
+      traceId: "trace_demo_123",
+      notes: "these keys are not in the schema and should be ignored",
+    },
+  };
+}
+
+function createDualStream(
+  data: object,
+  chunkSize = 10,
+  delayMs = 500,
+  scenario: DemoScenario = "normal",
+) {
+  const payload = scenario === "hallucinations" ? injectHallucinations(data) : data;
+  const json = JSON.stringify(payload);
   let aborted = false;
 
-  const start = async (onChunk: StreamCallback, onComplete: () => void) => {
-    for (let i = 0; i < json.length && !aborted; i += chunkSize) {
-      await new Promise((r) => setTimeout(r, delayMs));
-      if (!aborted) {
-        onChunk(json.slice(i, i + chunkSize));
+  const maxLen =
+    scenario === "truncated" ? Math.max(0, Math.floor(json.length * 0.7)) : json.length;
+  const errorAtChunk = 6;
+  const plannedChunks = Math.ceil(maxLen / chunkSize);
+  const estimatedChunks =
+    scenario === "source_error" ? Math.min(plannedChunks, errorAtChunk) : plannedChunks;
+
+  const start: StreamStart = async (onChunk, onComplete, onError) => {
+    try {
+      let chunkIndex = 0;
+      for (let i = 0; i < maxLen && !aborted; i += chunkSize) {
+        await new Promise((r) => setTimeout(r, delayMs));
+        if (aborted) break;
+        if (scenario === "source_error" && chunkIndex === errorAtChunk) {
+          throw new Error("Simulated source error");
+        }
+        onChunk(json.slice(i, Math.min(i + chunkSize, maxLen)));
+        chunkIndex++;
       }
+      if (!aborted) onComplete();
+    } catch (err) {
+      if (aborted) return;
+      const error = err instanceof Error ? err : new Error(String(err));
+      onError?.(error);
     }
-    if (!aborted) onComplete();
   };
 
   const abort = () => {
@@ -168,9 +210,15 @@ function createDualStream(data: object, chunkSize = 10, delayMs = 500) {
   // Also return as AsyncIterable for the hook
   const asyncIterable: AsyncIterable<string> = {
     async *[Symbol.asyncIterator]() {
-      for (let i = 0; i < json.length; i += chunkSize) {
+      let chunkIndex = 0;
+      for (let i = 0; i < maxLen; i += chunkSize) {
         await new Promise((r) => setTimeout(r, delayMs));
-        yield json.slice(i, i + chunkSize);
+        if (aborted) return;
+        if (scenario === "source_error" && chunkIndex === errorAtChunk) {
+          throw new Error("Simulated source error");
+        }
+        yield json.slice(i, Math.min(i + chunkSize, maxLen));
+        chunkIndex++;
       }
     },
   };
@@ -179,7 +227,8 @@ function createDualStream(data: object, chunkSize = 10, delayMs = 500) {
     start,
     abort,
     asyncIterable,
-    totalChunks: Math.ceil(json.length / chunkSize),
+    totalChunks: estimatedChunks,
+    estimatedDurationMs: estimatedChunks * delayMs,
   };
 }
 
@@ -190,7 +239,7 @@ function createDualStream(data: object, chunkSize = 10, delayMs = 500) {
 function FormWithoutHook({
   stream,
 }: {
-  stream: { start: Function; abort: Function } | null;
+  stream: { start: StreamStart; abort: () => void } | null;
 }) {
   const [data, setData] = useState<any>(null);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -256,7 +305,16 @@ function FormWithoutHook({
       },
       () => {
         setIsStreaming(false);
-        setJsonError(null);
+        try {
+          JSON.parse(accumulatedJsonRef.current);
+          setJsonError(null);
+        } catch (e: any) {
+          setJsonError(`JSON.parse error: ${e.message}`);
+        }
+      },
+      (err: Error) => {
+        setIsStreaming(false);
+        setJsonError(err.message);
       },
     );
 
@@ -267,8 +325,22 @@ function FormWithoutHook({
     <div className="panel without">
       <div className="panel-header">
         <span className="badge bad">Problem</span>
-        <span className="label">Standard JSON.parse + manual state</span>
+        <span className="label">JSON.parse fails mid-stream, state is manual</span>
       </div>
+
+      {jsonError && (
+        <div className="json-error">
+          <div className="json-error-title">Partial JSON is not valid JSON</div>
+          <div>{jsonError}</div>
+          {partialJson && (
+            <div className="json-partial">
+              {partialJson.length > 180
+                ? `…${partialJson.slice(-180)}`
+                : partialJson}
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="form-content" ref={contentRef}>
         {/* Fields appear one by one - LAYOUT SHIFT! */}
@@ -353,6 +425,12 @@ function FormWithoutHook({
             {data ? Object.keys(data).length : 0}/10
           </span>
         </div>
+        <div className="stat">
+          <span>State:</span>
+          <span className="stat-value">
+            {isStreaming ? "Streaming..." : data ? "Done" : "Idle"}
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -363,14 +441,36 @@ function FormWithoutHook({
 // ============================================
 
 function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
-  const { data, isStreaming, isComplete } = useStableStream({
+  const {
+    data,
+    isStreaming,
+    isComplete,
+    isPartial,
+    completionReason,
+    error,
+    changedPaths,
+  } = useStableStream({
     schema: EmployeeFormSchema,
     source: stream,
   });
 
-  const filledFields = Object.values(data).filter(
-    (v) => v !== "" && v !== 0 && v !== false,
-  ).length;
+  const [seenPaths, setSeenPaths] = useState<Set<string>>(() => new Set());
+
+  useEffect(() => {
+    setSeenPaths(new Set());
+  }, [stream]);
+
+  useEffect(() => {
+    if (changedPaths.length === 0) return;
+    setSeenPaths((prev) => {
+      const next = new Set(prev);
+      for (const p of changedPaths) next.add(p);
+      return next;
+    });
+  }, [changedPaths]);
+
+  const isReady = (path: string) => seenPaths.has(path);
+  const readyCount = seenPaths.size;
 
   return (
     <div className="panel with">
@@ -378,71 +478,73 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
         <span className="badge good">Solution</span>
         <span className="label">stable-stream hook — zero CLS</span>
       </div>
+
+      {error && (
+        <div className="json-error">
+          <div className="json-error-title">Stream error</div>
+          <div>{error.message}</div>
+        </div>
+      )}
+
       <div className="form-content">
         {/* All fields always present - NO LAYOUT SHIFT! */}
         <div className="field">
           <label>First Name</label>
-          <div className={`value ${!data.firstName ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("firstName") ? "skeleton" : ""}`}>
             {data.firstName || "..."}
           </div>
         </div>
         <div className="field">
           <label>Last Name</label>
-          <div className={`value ${!data.lastName ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("lastName") ? "skeleton" : ""}`}>
             {data.lastName || "..."}
           </div>
         </div>
         <div className="field">
           <label>Email</label>
-          <div className={`value ${!data.email ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("email") ? "skeleton" : ""}`}>
             {data.email || "..."}
           </div>
         </div>
         <div className="field">
           <label>Phone</label>
-          <div className={`value ${!data.phone ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("phone") ? "skeleton" : ""}`}>
             {data.phone || "..."}
           </div>
         </div>
         <div className="field">
           <label>Department</label>
-          <div className={`value ${!data.department ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("department") ? "skeleton" : ""}`}>
             {data.department || "..."}
           </div>
         </div>
         <div className="field">
           <label>Job Title</label>
-          <div className={`value ${!data.jobTitle ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("jobTitle") ? "skeleton" : ""}`}>
             {data.jobTitle || "..."}
           </div>
         </div>
         <div className="field">
           <label>Salary</label>
-          <div className={`value ${!data.salary ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("salary") ? "skeleton" : ""}`}>
             {data.salary ? `$${data.salary.toLocaleString()}` : "..."}
           </div>
         </div>
         <div className="field">
           <label>Start Date</label>
-          <div className={`value ${!data.startDate ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("startDate") ? "skeleton" : ""}`}>
             {data.startDate || "..."}
           </div>
         </div>
         <div className="field">
           <label>Status</label>
-          <div
-            className={`value ${data.isActive === false ? "" : !data.isActive ? "skeleton" : ""}`}
-          >
-            {data.isActive
-              ? "Active"
-              : data.isActive === false
-                ? "Inactive"
-                : "..."}
+          <div className={`value ${!isReady("isActive") ? "skeleton" : ""}`}>
+            {isReady("isActive") ? (data.isActive ? "Active" : "Inactive") : "..."}
           </div>
         </div>
         <div className="field">
           <label>Bio</label>
-          <div className={`value ${!data.bio ? "skeleton" : ""}`}>
+          <div className={`value ${!isReady("bio") ? "skeleton" : ""}`}>
             {data.bio || "..."}
           </div>
         </div>
@@ -455,13 +557,23 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
         </div>
         <div className="stat">
           <span>Fields Ready:</span>
-          <span className="stat-value">{filledFields}/10</span>
+          <span className="stat-value">{Math.min(readyCount, 10)}/10</span>
         </div>
         <div className="stat">
           <span>State:</span>
           <span className="stat-value">
-            {isComplete ? "Complete" : isStreaming ? "Streaming..." : "Idle"}
+            {isComplete
+              ? isPartial
+                ? "Partial"
+                : "Complete"
+              : isStreaming
+                ? "Streaming..."
+                : "Idle"}
           </span>
+        </div>
+        <div className="stat">
+          <span>Reason:</span>
+          <span className="stat-value">{completionReason ?? "—"}</span>
         </div>
       </div>
     </div>
@@ -475,15 +587,18 @@ function FormWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
 function TableWithoutHook({
   stream,
 }: {
-  stream: { start: Function; abort: Function } | null;
+  stream: { start: StreamStart; abort: () => void } | null;
 }) {
   const [rows, setRows] = useState<any[]>([]);
   const [title, setTitle] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [heightChanges, setHeightChanges] = useState(0);
+  const [jsonError, setJsonError] = useState<string | null>(null);
+  const [partialJson, setPartialJson] = useState<string>("");
   const parserRef = useRef(createIncrementalParser());
   const contentRef = useRef<HTMLDivElement>(null);
   const lastHeightRef = useRef(0);
+  const accumulatedJsonRef = useRef("");
 
   useEffect(() => {
     if (!stream) return;
@@ -493,12 +608,24 @@ function TableWithoutHook({
     setTitle("");
     setIsStreaming(true);
     setHeightChanges(0);
+    setJsonError(null);
+    setPartialJson("");
+    accumulatedJsonRef.current = "";
     lastHeightRef.current = 0;
 
     const rowsData: any[] = [];
 
     stream.start(
       (chunk: string) => {
+        accumulatedJsonRef.current += chunk;
+        setPartialJson(accumulatedJsonRef.current);
+        try {
+          JSON.parse(accumulatedJsonRef.current);
+          setJsonError(null);
+        } catch (e: any) {
+          setJsonError(`JSON.parse error: ${e.message}`);
+        }
+
         const parsed = parserRef.current.process(chunk);
         for (const { path, value } of parsed) {
           if (path === "title") {
@@ -531,7 +658,19 @@ function TableWithoutHook({
           lastHeightRef.current = newHeight;
         }
       },
-      () => setIsStreaming(false),
+      () => {
+        setIsStreaming(false);
+        try {
+          JSON.parse(accumulatedJsonRef.current);
+          setJsonError(null);
+        } catch (e: any) {
+          setJsonError(`JSON.parse error: ${e.message}`);
+        }
+      },
+      (err: Error) => {
+        setIsStreaming(false);
+        setJsonError(err.message);
+      },
     );
 
     return () => stream.abort();
@@ -543,6 +682,21 @@ function TableWithoutHook({
         <span className="badge bad">Problem</span>
         <span className="label">Rows appear suddenly, layout jumps</span>
       </div>
+
+      {jsonError && (
+        <div className="json-error">
+          <div className="json-error-title">Partial JSON is not valid JSON</div>
+          <div>{jsonError}</div>
+          {partialJson && (
+            <div className="json-partial">
+              {partialJson.length > 180
+                ? `…${partialJson.slice(-180)}`
+                : partialJson}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="table-content" ref={contentRef}>
         <p className="table-title">
           {title || (isStreaming ? "Loading title..." : 'Click "Stream Demo"')}
@@ -608,7 +762,8 @@ function TableWithoutHook({
 // ============================================
 
 function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
-  const { data, isStreaming, isComplete } = useStableStream({
+  const { data, isStreaming, isComplete, isPartial, completionReason, error } =
+    useStableStream({
     schema: EmployeeTableSchema,
     source: stream,
   });
@@ -621,6 +776,14 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
         <span className="badge good">Solution</span>
         <span className="label">10 skeleton rows ready, smooth fill</span>
       </div>
+
+      {error && (
+        <div className="json-error">
+          <div className="json-error-title">Stream error</div>
+          <div>{error.message}</div>
+        </div>
+      )}
+
       <div className="table-content">
         <p className="table-title">{data.title || "Loading..."}</p>
         <div className="table-wrapper">
@@ -670,7 +833,8 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
           {isComplete ? (
             <>
               <span className="highlight">{filledRows} rows</span> loaded
-              (skeleton trimmed)
+              {isPartial ? " (partial)" : " (skeleton trimmed)"} •{" "}
+              <span className="highlight">{completionReason}</span>
             </>
           ) : (
             <>
@@ -698,19 +862,20 @@ export default function App() {
     typeof createDualStream
   > | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [scenario, setScenario] = useState<DemoScenario>("normal");
 
   const runFormComparison = () => {
     setIsRunning(true);
-    const stream = createDualStream(sampleFormData, 10, 60);
+    const stream = createDualStream(sampleFormData, 10, 60, scenario);
     setFormStream(stream);
-    setTimeout(() => setIsRunning(false), 4000);
+    setTimeout(() => setIsRunning(false), stream.estimatedDurationMs + 400);
   };
 
   const runTableComparison = () => {
     setIsRunning(true);
-    const stream = createDualStream(sampleTableData, 12, 50);
+    const stream = createDualStream(sampleTableData, 12, 50, scenario);
     setTableStream(stream);
-    setTimeout(() => setIsRunning(false), 5000);
+    setTimeout(() => setIsRunning(false), stream.estimatedDurationMs + 400);
   };
 
   return (
@@ -721,6 +886,24 @@ export default function App() {
           Stream structured JSON from LLMs with zero layout shift. See the
           difference side-by-side.
         </p>
+        <div className="controls">
+          <div className="control">
+            <label>Scenario</label>
+            <select
+              value={scenario}
+              onChange={(e) => setScenario(e.target.value as DemoScenario)}
+            >
+              <option value="normal">Normal</option>
+              <option value="hallucinations">Hallucinated extra keys</option>
+              <option value="truncated">Truncated JSON</option>
+              <option value="source_error">Source error</option>
+            </select>
+          </div>
+          <div className="control-hint">
+            Applies to both demos. Truncated/source error should show{" "}
+            <code>completionReason</code>.
+          </div>
+        </div>
       </header>
 
       <section className="demo-section">

@@ -7,13 +7,11 @@ import type { HydrateOptions } from "../index";
  */
 export function generateUnion(
   typeName: string,
-  schema: z.ZodTypeAny,
-  hydrate: (schema: z.ZodTypeAny, options: HydrateOptions, depth: number) => any,
-  options: HydrateOptions,
-  depth: number
+  _schema: z.ZodTypeAny,
+  _hydrate: (schema: z.ZodTypeAny, options: HydrateOptions, depth: number) => any,
+  _options: HydrateOptions,
+  _depth: number
 ): any {
-  const def = schema._def as any;
-
   switch (typeName) {
     case z.ZodFirstPartyTypeKind.ZodUnion:
     case z.ZodFirstPartyTypeKind.ZodDiscriminatedUnion: {
