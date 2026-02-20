@@ -123,6 +123,7 @@ interface StableStreamOptions<T extends z.ZodTypeAny> {
   schema: T;                          // Zod schema
   source: AsyncIterable<string>;      // JSON string chunks
   hydrateOptions?: HydrateOptions;    // Optional hydration config
+  trim?: boolean;                     // Optional: Remove unfilled skeleton array items on completion (default: false)
   onUpdate?: (update: StreamUpdate<z.infer<T>>) => void;  // Callback
 }
 
@@ -377,7 +378,7 @@ result = applyParsedValue(result.data, "items[0].id", 42);
 
 ### `trimSkeleton(data, arrayLengths)`
 
-Remove unfilled skeleton items from arrays. Called internally on stream completion.
+Remove unfilled skeleton items from arrays. Called internally on stream completion if the `trim` option is enabled.
 
 ```typescript
 import { trimSkeleton } from '@stable-stream/core';
@@ -637,6 +638,8 @@ const llmResponse = { name: "John", password: "secret", admin: true };
 const { data } = strictMerge(hydrate(schema), llmResponse);
 // data: { name: "John" }
 // password and admin are discarded
+
+This safety also applies recursively to nested objects, arrays, and Union types.
 ```
 
 ### Prototype Pollution Prevention

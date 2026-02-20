@@ -172,6 +172,7 @@ describe("Stream Orchestrator", () => {
       for await (const { data, state } of createStableStream({
         schema,
         source: chunksToStream([json]),
+        trim: true,
       })) {
         if (state === "complete") {
           finalData = data;
@@ -194,6 +195,7 @@ describe("Stream Orchestrator", () => {
       for await (const { data, state } of createStableStream({
         schema,
         source: chunksToStream([json]),
+        trim: true,
       })) {
         if (state === "complete") {
           finalData = data;

@@ -45,3 +45,6 @@ scripts/
 # Temporary files
 *.tmp
 *.temp
+
+# Turbo
+.turbo/

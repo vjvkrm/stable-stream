@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 /**
  * Strict Merge Algorithm with Structural Sharing
  *
@@ -70,19 +72,27 @@ function mergeValue(
   path: string,
   changedPaths: string[],
   discardedKeys: string[],
-  trackDiscarded: boolean
+  trackDiscarded: boolean,
+  schema?: z.ZodTypeAny
 ): InternalResult {
   // Null/undefined source - keep target unchanged
   if (source === null || source === undefined) {
     return { value: target, changed: false };
   }
 
-  // Target is null (union loading marker) - replace with source
+  // Target is null (union loading marker) - replace with source, but apply schema constraints if available
   if (target === null) {
+    let safeSource = source;
+
+    if (schema && isPlainObject(source)) {
+      // If we have a schema and source is an object, we need to filter out hallucinated keys
+      safeSource = filterBySchema(source as Record<string, unknown>, schema, path, discardedKeys, trackDiscarded);
+    }
+
     if (path) {
       changedPaths.push(path);
     }
-    return { value: source, changed: true };
+    return { value: safeSource, changed: true };
   }
 
   // Handle arrays
@@ -119,7 +129,8 @@ function mergeObject(
   path: string,
   changedPaths: string[],
   discardedKeys: string[],
-  trackDiscarded: boolean
+  trackDiscarded: boolean,
+  schema?: z.ZodTypeAny
 ): InternalResult {
   let anyChanged = false;
   const newObj: Record<string, unknown> = {};
@@ -139,6 +150,12 @@ function mergeObject(
     const targetValue = target[key];
     const sourceValue = source[key];
     const childPath = path ? `${path}.${key}` : key;
+    
+    // Resolve child schema if possible
+    let childSchema: z.ZodTypeAny | undefined;
+    if (schema) {
+      childSchema = getChildSchema(schema, key);
+    }
 
     const result = mergeValue(
       targetValue,
@@ -146,7 +163,8 @@ function mergeObject(
       childPath,
       changedPaths,
       discardedKeys,
-      trackDiscarded
+      trackDiscarded,
+      childSchema
     );
 
     if (result.changed) {
@@ -172,7 +190,8 @@ function mergeArray(
   path: string,
   changedPaths: string[],
   discardedKeys: string[],
-  trackDiscarded: boolean
+  trackDiscarded: boolean,
+  schema?: z.ZodTypeAny
 ): InternalResult {
   // Source must be array for array merge
   if (!Array.isArray(source)) {
@@ -184,6 +203,12 @@ function mergeArray(
 
   // Merge existing positions
   const maxLen = Math.max(target.length, source.length);
+  
+  // Resolve item schema if available
+  let itemSchema: z.ZodTypeAny | undefined;
+  if (schema) {
+    itemSchema = getChildSchema(schema, 0); // Arrays usually have singular item type
+  }
 
   for (let i = 0; i < maxLen; i++) {
     const childPath = `${path}[${i}]`;
@@ -196,7 +221,8 @@ function mergeArray(
         childPath,
         changedPaths,
         discardedKeys,
-        trackDiscarded
+        trackDiscarded,
+        itemSchema
       );
 
       if (result.changed) {
@@ -209,7 +235,13 @@ function mergeArray(
       // Source has more items than target skeleton
       // For streaming arrays, we accept new items beyond skeleton
       anyChanged = true;
-      newArr.push(source[i]);
+      
+      let itemVal = source[i];
+      if (itemSchema && isPlainObject(itemVal)) {
+        itemVal = filterBySchema(itemVal as Record<string, unknown>, itemSchema, childPath, discardedKeys, trackDiscarded);
+      }
+      
+      newArr.push(itemVal);
       changedPaths.push(childPath);
     } else {
       // Target has unfilled skeleton items
@@ -298,6 +330,133 @@ function coerceType(target: unknown, source: unknown): CoercionResult {
   return { compatible: false, value: source };
 }
 
+/**
+ * Gets allowed keys from an object schema, considering unions and intersections.
+ */
+function getAllowedKeys(schema: z.ZodTypeAny): Set<string> {
+  const keys = new Set<string>();
+  const typeName = (schema._def as any).typeName;
+
+  if (typeName === z.ZodFirstPartyTypeKind.ZodObject) {
+    const shape = (schema as z.ZodObject<any>).shape;
+    Object.keys(shape).forEach(k => keys.add(k));
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodUnion || typeName === z.ZodFirstPartyTypeKind.ZodDiscriminatedUnion) {
+    const options = (schema as any)._def.options || (schema as any).options;
+    if (Array.isArray(options)) {
+      options.forEach(opt => {
+        const optKeys = getAllowedKeys(opt);
+        optKeys.forEach(k => keys.add(k));
+      });
+    }
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodIntersection) {
+    const leftKeys = getAllowedKeys((schema as z.ZodIntersection<any, any>)._def.left);
+    const rightKeys = getAllowedKeys((schema as z.ZodIntersection<any, any>)._def.right);
+    leftKeys.forEach(k => keys.add(k));
+    rightKeys.forEach(k => keys.add(k));
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodLazy) {
+    return getAllowedKeys((schema as z.ZodLazy<any>)._def.getter());
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodEffects) {
+    return getAllowedKeys((schema as z.ZodEffects<any>)._def.schema);
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodOptional || typeName === z.ZodFirstPartyTypeKind.ZodNullable) {
+    return getAllowedKeys((schema as any).unwrap());
+  }
+
+  return keys;
+}
+
+/**
+ * Resolves the child schema for a given key or index.
+ */
+function getChildSchema(schema: z.ZodTypeAny, keyOrIndex: string | number): z.ZodTypeAny | undefined {
+  const typeName = (schema._def as any).typeName;
+
+  if (typeName === z.ZodFirstPartyTypeKind.ZodObject && typeof keyOrIndex === 'string') {
+    return (schema as z.ZodObject<any>).shape[keyOrIndex];
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodArray && typeof keyOrIndex === 'number') {
+    return (schema as z.ZodArray<any>).element;
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodRecord && typeof keyOrIndex === 'string') {
+    return (schema as z.ZodRecord<any>).element;
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodOptional || typeName === z.ZodFirstPartyTypeKind.ZodNullable) {
+    return getChildSchema((schema as any).unwrap(), keyOrIndex);
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodLazy) {
+    return getChildSchema((schema as z.ZodLazy<any>)._def.getter(), keyOrIndex);
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodEffects) {
+    return getChildSchema((schema as z.ZodEffects<any>)._def.schema, keyOrIndex);
+  } else if (typeName === z.ZodFirstPartyTypeKind.ZodUnion || typeName === z.ZodFirstPartyTypeKind.ZodDiscriminatedUnion) {
+    // In unions, we try to find a matching child schema in any of the options
+    const options = (schema as any)._def.options || (schema as any).options;
+    if (Array.isArray(options)) {
+      for (const opt of options) {
+        const child = getChildSchema(opt, keyOrIndex);
+        if (child) return child;
+      }
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Filter an object by stripping any keys not permitted by the schema.
+ * This is used for objects replacing a `null` loading marker.
+ */
+function filterBySchema(
+  obj: Record<string, unknown>, 
+  schema: z.ZodTypeAny, 
+  path: string,
+  discardedKeys: string[],
+  trackDiscarded: boolean
+): Record<string, unknown> {
+  const typeName = (schema._def as any).typeName;
+  
+  // If it's a pass-through catch-all like ZodAny or ZodRecord, don't filter
+  if (typeName === z.ZodFirstPartyTypeKind.ZodAny || typeName === z.ZodFirstPartyTypeKind.ZodRecord) {
+    return obj;
+  }
+
+  const allowedKeys = getAllowedKeys(schema);
+  
+  // If the schema didn't yield any object keys (e.g. primitive), return as-is
+  if (allowedKeys.size === 0) {
+    return obj;
+  }
+
+  const filtered: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (allowedKeys.has(key)) {
+      if (isPlainObject(value)) {
+        const childSchema = getChildSchema(schema, key);
+        if (childSchema) {
+          filtered[key] = filterBySchema(value as Record<string, unknown>, childSchema, `${path}.${key}`, discardedKeys, trackDiscarded);
+        } else {
+          filtered[key] = value;
+        }
+      } else if (Array.isArray(value)) {
+        const itemSchema = getChildSchema(schema, key);
+        if (itemSchema) {
+           filtered[key] = value.map((item, idx) => {
+             if (isPlainObject(item)) {
+                const arrItemSchema = getChildSchema(itemSchema, idx);
+                if (arrItemSchema) {
+                   return filterBySchema(item as Record<string, unknown>, arrItemSchema, `${path}.${key}[${idx}]`, discardedKeys, trackDiscarded);
+                }
+             }
+             return item;
+           });
+        } else {
+           filtered[key] = value;
+        }
+      } else {
+        filtered[key] = value;
+      }
+    } else if (trackDiscarded) {
+      discardedKeys.push(path ? `${path}.${key}` : key);
+    }
+  }
+
+  return filtered;
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return (
     typeof value === "object" &&
@@ -314,12 +473,14 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * @param target - Current state
  * @param path - Dot/bracket notation path (e.g., "user.name", "items[0].price")
  * @param value - Value to set
+ * @param schema - Overall Zod schema to guide hallucination protection for union resolutions
  * @returns New state with structural sharing
  */
 export function applyParsedValue<T>(
   target: T,
   path: string,
-  value: unknown
+  value: unknown,
+  schema?: z.ZodTypeAny
 ): MergeResult<T> {
   const changedPaths: string[] = [];
 
@@ -335,7 +496,7 @@ export function applyParsedValue<T>(
     };
   }
 
-  const result = applyAtPath(target, segments, 0, value, changedPaths);
+  const result = applyAtPath(target, segments, 0, value, changedPaths, schema);
 
   return {
     data: result.value as T,
@@ -350,10 +511,13 @@ function applyAtPath(
   segments: PathSegment[],
   index: number,
   value: unknown,
-  changedPaths: string[]
+  changedPaths: string[],
+  schema?: z.ZodTypeAny,
+  currentSchema?: z.ZodTypeAny
 ): InternalResult {
   const segment = segments[index];
   const isLast = index === segments.length - 1;
+  const activeSchema = currentSchema || schema;
 
   if (segment.type === "key") {
     // Object key access
@@ -371,12 +535,27 @@ function applyAtPath(
 
     if (isLast) {
       // Apply value at this key with type coercion
-      const coerced = coerceType(obj[key], value);
-      if (!coerced.compatible) {
-        return { value: target, changed: false };
+      
+      let newValue = value;
+      
+      const childSchema = activeSchema ? getChildSchema(activeSchema, key) : undefined;
+      
+      // If we are replacing a null target, we apply schema filtering to prevent hallucination bypass
+      if (obj[key] === null && isPlainObject(newValue) && childSchema) {
+         const fullPath = segments
+            .slice(0, index + 1)
+            .map((s) => (s.type === "index" ? `[${s.value}]` : s.value))
+            .join(".")
+            .replace(/\.\[/g, "[");
+         newValue = filterBySchema(newValue as Record<string, unknown>, childSchema, fullPath, [], false);
+      } else {
+         const coerced = coerceType(obj[key], newValue);
+         if (!coerced.compatible && obj[key] !== null) {
+            return { value: target, changed: false };
+         }
+         newValue = coerced.value;
       }
 
-      const newValue = coerced.value;
       if (obj[key] === newValue) {
         return { value: target, changed: false };
       }
@@ -397,12 +576,15 @@ function applyAtPath(
     }
 
     // Recurse into child
+    const childSchema = activeSchema ? getChildSchema(activeSchema, key) : undefined;
     const childResult = applyAtPath(
       obj[key],
       segments,
       index + 1,
       value,
-      changedPaths
+      changedPaths,
+      schema,
+      childSchema
     );
 
     if (!childResult.changed) {
@@ -435,9 +617,18 @@ function applyAtPath(
 
       // Type coercion if there's an existing value to coerce against
       let newValue = value;
-      if (newArr[idx] !== undefined) {
+      const childSchema = activeSchema ? getChildSchema(activeSchema, idx) : undefined;
+
+      if (newArr[idx] === null && isPlainObject(newValue) && childSchema) {
+         const fullPath = segments
+            .slice(0, index + 1)
+            .map((s) => (s.type === "index" ? `[${s.value}]` : s.value))
+            .join(".")
+            .replace(/\.\[/g, "[");
+         newValue = filterBySchema(newValue as Record<string, unknown>, childSchema, fullPath, [], false);
+      } else if (newArr[idx] !== undefined) {
         const coerced = coerceType(newArr[idx], value);
-        if (!coerced.compatible) {
+        if (!coerced.compatible && newArr[idx] !== null) {
           return { value: target, changed: false };
         }
         newValue = coerced.value;
@@ -465,12 +656,15 @@ function applyAtPath(
     }
 
     // Recurse into child
+    const childSchema = activeSchema ? getChildSchema(activeSchema, idx) : undefined;
     const childResult = applyAtPath(
       arr[idx],
       segments,
       index + 1,
       value,
-      changedPaths
+      changedPaths,
+      schema,
+      childSchema
     );
 
     if (!childResult.changed) {

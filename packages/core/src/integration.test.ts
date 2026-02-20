@@ -104,7 +104,7 @@ describe("Integration Tests", () => {
       });
     });
 
-    it("should stream table rows and trim on complete", async () => {
+    it("should stream table rows and keep skeleton items by default (trim=false)", async () => {
       const tableData = {
         title: "User List",
         rows: [
@@ -119,6 +119,36 @@ describe("Integration Tests", () => {
       for await (const update of createStableStream({
         schema: TableSchema,
         source: simulateLLMStream(JSON.stringify(tableData)),
+      })) {
+        updates.push(update);
+      }
+
+      const final = updates[updates.length - 1];
+      expect(final.state).toBe("complete");
+
+      // Should keep the 5 skeleton rows, filled with defaults for the last 2
+      expect(final.data.rows).toHaveLength(5);
+      expect(final.data.rows.slice(0, 3)).toEqual(tableData.rows);
+      expect(final.data.rows[3]).toEqual({ id: 0, name: "", email: "", status: "" });
+      expect(final.data.rows[4]).toEqual({ id: 0, name: "", email: "", status: "" });
+    });
+
+    it("should stream table rows and trim on complete when trim=true", async () => {
+      const tableData = {
+        title: "User List",
+        rows: [
+          { id: 1, name: "Alice", email: "alice@test.com", status: "active" },
+          { id: 2, name: "Bob", email: "bob@test.com", status: "pending" },
+          { id: 3, name: "Carol", email: "carol@test.com", status: "active" },
+        ],
+      };
+
+      const updates: any[] = [];
+
+      for await (const update of createStableStream({
+        schema: TableSchema,
+        source: simulateLLMStream(JSON.stringify(tableData)),
+        trim: true,
       })) {
         updates.push(update);
       }
@@ -225,6 +255,34 @@ describe("Integration Tests", () => {
       expect(result).toEqual({ name: "Alice", role: "admin" });
       expect((result as any).password).toBeUndefined();
       expect((result as any).ssn).toBeUndefined();
+    });
+
+    it("should discard unknown fields when resolving union types", async () => {
+      const UnionSchema = z.object({
+        config: z.union([
+          z.object({ type: z.literal("A"), value: z.string() }),
+          z.object({ type: z.literal("B"), count: z.number() })
+        ])
+      });
+
+      const llmResponse = {
+        config: {
+          type: "A",
+          value: "test",
+          hallucinatedKey: "should be removed",
+          anotherBadKey: 123
+        }
+      };
+
+      const result = await consumeStableStream({
+        schema: UnionSchema,
+        source: simulateLLMStream(JSON.stringify(llmResponse)),
+      });
+
+      expect(result).toEqual({ 
+        config: { type: "A", value: "test" } 
+      });
+      expect((result.config as any).hallucinatedKey).toBeUndefined();
     });
   });
 

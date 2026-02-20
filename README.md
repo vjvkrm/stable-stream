@@ -229,9 +229,9 @@ for await (const { data, state } of stream) {
 
 - **Zero Layout Shift** — All fields exist from T=0 with skeleton values
 - **Type Safety** — `data.field` is always the declared type, never undefined
-- **Hallucination Protection** — Keys not in schema are discarded
+- **Hallucination Protection** — Keys not in schema (including within Union types) are cleanly discarded
 - **Array Pre-fill** — Use `.min(n)` to pre-render skeleton rows
-- **Skeleton Trimming** — Unfilled array items removed on completion
+- **Configurable Skeleton Trimming** — Target unfilled array items to be removed at completion via `trim: true`
 - **Partial Completion Signals** — Detect truncated/errored streams via `isPartial` and `completionReason`
 - **60fps Throttling** — React hook uses RAF to limit re-renders
 - **Structural Sharing** — Only changed paths create new references
@@ -273,8 +273,9 @@ JSON string chunks: `{"name": "Jo` (incomplete)
 ```typescript
 const { data, isStreaming, isComplete, isPartial, completionReason, error, reset } = useStableStream({
   schema: ZodSchema,           // Required: Zod schema
-  source: AsyncIterable | null, // JSON string chunks (null = don't start)
-  throttle: true,              // Optional: RAF throttling (default: true)
+  source: AsyncIterable | string | null, // JSON string chunks or static JSON string (null = don't start)
+  throttle: true,              // Optional: true (60fps limit), false (no limit), or number for time-based delay (default: true)
+  trim: false,                 // Optional: Remove unfilled skeleton array items (default: false)
   onComplete: (data) => {},    // Optional: Called when stream completes
   onError: (error) => {},      // Optional: Called on error
 });
@@ -286,6 +287,7 @@ const { data, isStreaming, isComplete, isPartial, completionReason, error, reset
 const stream = createStableStream({
   schema: ZodSchema,            // Required: Zod schema
   source: AsyncIterable<string>, // Required: JSON string chunks
+  trim: false,                  // Optional: Remove unfilled skeleton array items (default: false)
 });
 
 for await (const { data, state, isPartial, completionReason, changedPaths } of stream) {

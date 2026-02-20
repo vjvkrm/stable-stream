@@ -233,6 +233,44 @@ function createDualStream(
 }
 
 // ============================================
+// Raw Stream Viewer
+// ============================================
+
+function RawStreamTerminal({
+  chunks,
+  isStreaming,
+}: {
+  chunks: string[];
+  isStreaming: boolean;
+}) {
+  const terminalRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (terminalRef.current) {
+      terminalRef.current.scrollTop = terminalRef.current.scrollHeight;
+    }
+  }, [chunks]);
+
+  return (
+    <div className="terminal-container">
+      <div className="terminal-header">
+        <div className={`terminal-title ${isStreaming ? "streaming" : ""}`}>
+          RAW LLM STREAM (JSON)
+        </div>
+      </div>
+      <div className="terminal-content" ref={terminalRef}>
+        {chunks.map((chunk, i) => (
+          <span key={i} className="chunk">
+            {chunk}
+          </span>
+        ))}
+        {isStreaming && <span className="terminal-cursor" />}
+      </div>
+    </div>
+  );
+}
+
+// ============================================
 // WITHOUT HOOK -
 // ============================================
 
@@ -270,13 +308,8 @@ function FormWithoutHook({
         accumulatedJsonRef.current += chunk;
         setPartialJson(accumulatedJsonRef.current);
 
-        // Try standard JSON.parse - will fail on incomplete JSON
-        try {
-          JSON.parse(accumulatedJsonRef.current);
-          setJsonError(null);
-        } catch (e: any) {
-          setJsonError(`JSON.parse error: ${e.message}`);
-        }
+        // Do not surface raw JSON.parse errors for partial chunks.
+        // We'll keep a partial preview but avoid alarming technical errors.
 
         // Use our incremental parser
         const parsed = parserRef.current.process(chunk);
@@ -305,16 +338,17 @@ function FormWithoutHook({
       },
       () => {
         setIsStreaming(false);
+        // If final parse fails, surface a friendly message instead of raw parse text.
         try {
           JSON.parse(accumulatedJsonRef.current);
           setJsonError(null);
-        } catch (e: any) {
-          setJsonError(`JSON.parse error: ${e.message}`);
+        } catch (_) {
+          setJsonError("Received truncated or invalid JSON (partial result)");
         }
       },
       (err: Error) => {
         setIsStreaming(false);
-        setJsonError(err.message);
+        setJsonError(`Source error: ${err.message}`);
       },
     );
 
@@ -330,7 +364,7 @@ function FormWithoutHook({
 
       {jsonError && (
         <div className="json-error">
-          <div className="json-error-title">Partial JSON is not valid JSON</div>
+          <div className="json-error-title">Streaming (partial data)</div>
           <div>{jsonError}</div>
           {partialJson && (
             <div className="json-partial">
@@ -619,12 +653,7 @@ function TableWithoutHook({
       (chunk: string) => {
         accumulatedJsonRef.current += chunk;
         setPartialJson(accumulatedJsonRef.current);
-        try {
-          JSON.parse(accumulatedJsonRef.current);
-          setJsonError(null);
-        } catch (e: any) {
-          setJsonError(`JSON.parse error: ${e.message}`);
-        }
+        // Do not surface raw JSON.parse errors while streaming partial chunks.
 
         const parsed = parserRef.current.process(chunk);
         for (const { path, value } of parsed) {
@@ -663,13 +692,13 @@ function TableWithoutHook({
         try {
           JSON.parse(accumulatedJsonRef.current);
           setJsonError(null);
-        } catch (e: any) {
-          setJsonError(`JSON.parse error: ${e.message}`);
+        } catch (_) {
+          setJsonError("Received truncated or invalid JSON (partial result)");
         }
       },
       (err: Error) => {
         setIsStreaming(false);
-        setJsonError(err.message);
+        setJsonError(`Source error: ${err.message}`);
       },
     );
 
@@ -685,7 +714,7 @@ function TableWithoutHook({
 
       {jsonError && (
         <div className="json-error">
-          <div className="json-error-title">Partial JSON is not valid JSON</div>
+          <div className="json-error-title">Streaming (partial data)</div>
           <div>{jsonError}</div>
           {partialJson && (
             <div className="json-partial">
@@ -762,7 +791,7 @@ function TableWithoutHook({
 // ============================================
 
 function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
-  const { data, isStreaming, isComplete, isPartial, completionReason, error } =
+  const { data, isComplete, isPartial, completionReason, error } =
     useStableStream({
     schema: EmployeeTableSchema,
     source: stream,
@@ -861,21 +890,48 @@ export default function App() {
   const [tableStream, setTableStream] = useState<ReturnType<
     typeof createDualStream
   > | null>(null);
-  const [isRunning, setIsRunning] = useState(false);
+
+  // Raw chunks state
+  const [rawChunks, setRawChunks] = useState<string[]>([]);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [scenario, setScenario] = useState<DemoScenario>("normal");
 
   const runFormComparison = () => {
-    setIsRunning(true);
+    setIsStreaming(true);
+    setRawChunks([]);
     const stream = createDualStream(sampleFormData, 10, 60, scenario);
+    
+    // Intercept chunks for the terminal
+    const originalStart = stream.start;
+    stream.start = async (onChunk, onComplete, onError) => {
+      const wrappedOnChunk = (chunk: string) => {
+        setRawChunks((prev) => [...prev, chunk]);
+        onChunk(chunk);
+      };
+      return originalStart(wrappedOnChunk, onComplete, onError);
+    };
+
     setFormStream(stream);
-    setTimeout(() => setIsRunning(false), stream.estimatedDurationMs + 400);
+    setTimeout(() => setIsStreaming(false), stream.estimatedDurationMs + 400);
   };
 
   const runTableComparison = () => {
-    setIsRunning(true);
+    setIsStreaming(true);
+    setRawChunks([]);
     const stream = createDualStream(sampleTableData, 12, 50, scenario);
+
+    // Intercept chunks for the terminal
+    const originalStart = stream.start;
+    stream.start = async (onChunk, onComplete, onError) => {
+      const wrappedOnChunk = (chunk: string) => {
+        setRawChunks((prev) => [...prev, chunk]);
+        onChunk(chunk);
+      };
+      return originalStart(wrappedOnChunk, onComplete, onError);
+    };
+
     setTableStream(stream);
-    setTimeout(() => setIsRunning(false), stream.estimatedDurationMs + 400);
+    setTimeout(() => setIsStreaming(false), stream.estimatedDurationMs + 400);
   };
 
   return (
@@ -912,11 +968,16 @@ export default function App() {
           <button
             className="run-btn"
             onClick={runFormComparison}
-            disabled={isRunning}
+            disabled={isStreaming}
           >
             Stream Demo
           </button>
         </div>
+        
+        {formStream && (
+          <RawStreamTerminal chunks={rawChunks} isStreaming={isStreaming} />
+        )}
+
         <div className="comparison">
           <FormWithoutHook stream={formStream} />
           <FormWithHook stream={formStream?.asyncIterable || null} />
@@ -929,11 +990,16 @@ export default function App() {
           <button
             className="run-btn"
             onClick={runTableComparison}
-            disabled={isRunning}
+            disabled={isStreaming}
           >
             Stream Demo
           </button>
         </div>
+
+        {tableStream && (
+          <RawStreamTerminal chunks={rawChunks} isStreaming={isStreaming} />
+        )}
+
         <div className="comparison">
           <TableWithoutHook stream={tableStream} />
           <TableWithHook stream={tableStream?.asyncIterable || null} />

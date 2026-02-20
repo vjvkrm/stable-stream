@@ -16,6 +16,9 @@ body {
   max-width: 1400px;
   margin: 0 auto;
   padding: 2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 }
 
 /* Header */
@@ -158,17 +161,27 @@ header p {
   background: white;
   border-radius: 16px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05), 0 4px 12px rgba(0, 0, 0, 0.05);
-  border: 2px solid transparent;
-  transition: border-color 0.2s;
+  box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  border: 1px solid #e2e8f0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.panel:hover {
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
 }
 
 .panel.without {
+  background-image: linear-gradient(#f1f5f9 1px, transparent 1px),
+    linear-gradient(90deg, #f1f5f9 1px, transparent 1px);
+  background-size: 20px 20px;
   border-color: #fca5a5;
+  border-width: 2px;
 }
 
 .panel.with {
   border-color: #86efac;
+  border-width: 2px;
 }
 
 .panel-header {
@@ -240,7 +253,8 @@ header p {
 /* Form Content */
 .form-content {
   padding: 1.25rem;
-  min-height: 420px; /* Fixed height to show CLS */
+  min-height: 420px;
+  /* Fixed height to show CLS */
 }
 
 /* For the "without" panel - no min-height to show CLS */
@@ -280,15 +294,21 @@ header p {
 }
 
 .field .value.skeleton {
-  color: #94a3b8;
+  color: transparent;
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
   background-size: 200% 100%;
-  animation: shimmer 1.5s infinite ease-in-out;
+  animation: shimmer 2s infinite linear;
+  border-color: transparent;
 }
 
 @keyframes shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
 }
 
 .empty-state {
@@ -329,6 +349,7 @@ table {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.85rem;
+  table-layout: fixed;
 }
 
 th {
@@ -347,6 +368,10 @@ td {
   padding: 0.75rem 1rem;
   border-bottom: 1px solid #f1f5f9;
   color: #334155;
+  height: 3.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 tr:last-child td {
@@ -471,4 +496,113 @@ tr.skeleton-row:hover {
 
 .stat-value.success {
   color: #16a34a;
+}
+
+/* Raw Stream Terminal */
+.terminal-container {
+  background: #0f172a;
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 2rem;
+  box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+  border: 1px solid #1e293b;
+  position: relative;
+  overflow: hidden;
+}
+
+.terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #1e293b;
+}
+
+.terminal-title {
+  color: #94a3b8;
+  font-family: 'SF Mono', Monaco, monospace;
+  font-size: 0.8rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.terminal-title::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ec4899;
+  box-shadow: 0 0 10px #ec4899;
+}
+
+.terminal-title.streaming::before {
+  animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+  0% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.4;
+  }
+
+  100% {
+    opacity: 1;
+  }
+}
+
+.terminal-content {
+  font-family: 'SF Mono', Monaco, 'Consolas', monospace;
+  font-size: 0.85rem;
+  color: #38bdf8;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  height: 200px;
+  overflow-y: auto;
+  padding-right: 1rem;
+}
+
+.terminal-content span.chunk {
+  animation: typeIn 0.1s ease-out forwards;
+}
+
+@keyframes typeIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.terminal-cursor {
+  display: inline-block;
+  width: 8px;
+  height: 1em;
+  background: #38bdf8;
+  vertical-align: middle;
+  margin-left: 2px;
+  animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0;
+  }
 }

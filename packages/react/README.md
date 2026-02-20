@@ -131,8 +131,9 @@ function ProductGenerator() {
 ```typescript
 const { data, isStreaming, isComplete, isPartial, completionReason, error, reset } = useStableStream({
   schema,        // Zod schema (required)
-  source,        // AsyncIterable<string> | null
-  throttle,      // Limit to 60fps (default: true)
+  source,        // AsyncIterable<string> | string | null
+  throttle,      // true (60fps), false (no limit), or number (e.g., 100 for max 1 update per 100ms) (default: true)
+  trim,          // Optional: Remove unfilled skeleton array items (default: false)
   onComplete,    // Callback when done
   onError,       // Callback on error
 });
