@@ -1,19 +1,19 @@
-# @stable-stream/core
+# @vjvkrm/stable-stream-core
 
 Core engine for parsing, hydrating, and merging streaming JSON from LLMs. Schema-first approach ensures type-safe, layout-stable data from the first byte.
 
 ## Installation
 
 ```bash
-npm install @stable-stream/core zod
+npm install @vjvkrm/stable-stream-core zod
 # or
-pnpm add @stable-stream/core zod
+pnpm add @vjvkrm/stable-stream-core zod
 ```
 
 ## Quick Start
 
 ```typescript
-import { createStableStream } from '@stable-stream/core';
+import { createStableStream } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -97,7 +97,7 @@ data.items.forEach(item => appendRow(item));
 **Why it works everywhere:**
 - Output is plain objects/arrays - no framework bindings
 - No DOM manipulation - just data transformation
-- No React hooks or Vue composables in core - those are in `@stable-stream/react`
+- No React hooks or Vue composables in core - those are in `@vjvkrm/stable-stream-react`
 - Structural sharing ensures efficient updates in any reactive system
 
 ## Architecture
@@ -140,7 +140,7 @@ interface StreamUpdate<T> {
 **Example:**
 
 ```typescript
-import { createStableStream } from '@stable-stream/core';
+import { createStableStream } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const ProductSchema = z.object({
@@ -179,7 +179,7 @@ async function streamProduct(textStream: AsyncIterable<string>) {
 Helper that consumes the stream and returns final data. Use when you just want the result.
 
 ```typescript
-import { consumeStableStream } from '@stable-stream/core';
+import { consumeStableStream } from '@vjvkrm/stable-stream-core';
 
 const data = await consumeStableStream({
   schema: UserSchema,
@@ -197,7 +197,7 @@ Note: `consumeStableStream` remains lenient. If JSON is truncated but no source 
 Generate a complete skeleton from a Zod schema. Called internally by `createStableStream`.
 
 ```typescript
-import { hydrate } from '@stable-stream/core';
+import { hydrate } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const schema = z.object({
@@ -272,7 +272,7 @@ const skeleton = hydrate(TableSchema);
 Low-level incremental JSON parser. Extracts complete values from incomplete JSON.
 
 ```typescript
-import { createIncrementalParser } from '@stable-stream/core';
+import { createIncrementalParser } from '@vjvkrm/stable-stream-core';
 
 const parser = createIncrementalParser();
 
@@ -308,7 +308,7 @@ const results = parser.process('{"tags": ["a", "b", "c"]}');
 Merge source into target with hallucination protection. Only allows keys that exist in target.
 
 ```typescript
-import { strictMerge } from '@stable-stream/core';
+import { strictMerge } from '@vjvkrm/stable-stream-core';
 
 const skeleton = { name: "", age: 0 };
 const parsed = { name: "John", age: 25, evil: "HACKED" };
@@ -358,7 +358,7 @@ strictMerge({ active: false }, { active: "true" });
 Apply a single parsed value at a path. Uses structural sharing.
 
 ```typescript
-import { applyParsedValue } from '@stable-stream/core';
+import { applyParsedValue } from '@vjvkrm/stable-stream-core';
 
 const state = {
   user: { name: "", email: "" },
@@ -381,7 +381,7 @@ result = applyParsedValue(result.data, "items[0].id", 42);
 Remove unfilled skeleton items from arrays. Called internally on stream completion if the `trim` option is enabled.
 
 ```typescript
-import { trimSkeleton } from '@stable-stream/core';
+import { trimSkeleton } from '@vjvkrm/stable-stream-core';
 
 const data = {
   rows: [
@@ -406,7 +406,7 @@ const trimmed = trimSkeleton(data, lengths);
 ```typescript
 import { streamObject } from 'ai';
 import { openai } from '@ai-sdk/openai';
-import { createStableStream } from '@stable-stream/core';
+import { createStableStream } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const ProductSchema = z.object({
@@ -461,7 +461,7 @@ async function generateProduct(prompt: string) {
 
 ```typescript
 import OpenAI from 'openai';
-import { createStableStream } from '@stable-stream/core';
+import { createStableStream } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const openai = new OpenAI();
@@ -500,7 +500,7 @@ async function generateUser() {
 
 ```typescript
 import Anthropic from '@anthropic-ai/sdk';
-import { createStableStream } from '@stable-stream/core';
+import { createStableStream } from '@vjvkrm/stable-stream-core';
 import { z } from 'zod';
 
 const anthropic = new Anthropic();
@@ -542,7 +542,7 @@ async function analyze(text: string) {
 ### Custom State Management
 
 ```typescript
-import { hydrate, createIncrementalParser, applyParsedValue, trimSkeleton } from '@stable-stream/core';
+import { hydrate, createIncrementalParser, applyParsedValue, trimSkeleton } from '@vjvkrm/stable-stream-core';
 
 // Manual control over the pipeline
 const schema = z.object({ name: z.string(), items: z.array(z.string()) });

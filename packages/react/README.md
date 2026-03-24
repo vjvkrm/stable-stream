@@ -1,11 +1,11 @@
-# @stable-stream/react
+# @vjvkrm/stable-stream-react
 
 React hook for streaming structured JSON from LLMs. Zero layout shift, always type-safe.
 
 ## Installation
 
 ```bash
-npm install @stable-stream/react @stable-stream/core zod
+npm install @vjvkrm/stable-stream-react @vjvkrm/stable-stream-core zod
 ```
 
 ## The Problem
@@ -40,7 +40,7 @@ function UserProfile({ textStream }) {
 
 ```tsx
 // ✅ WITH stable-stream
-import { useStableStream } from '@stable-stream/react';
+import { useStableStream } from '@vjvkrm/stable-stream-react';
 import { z } from 'zod';
 
 const UserSchema = z.object({
@@ -72,7 +72,7 @@ function UserProfile({ textStream }) {
 
 ```tsx
 import { useState } from 'react';
-import { useStableStream } from '@stable-stream/react';
+import { useStableStream } from '@vjvkrm/stable-stream-react';
 import { z } from 'zod';
 
 // Define your schema once

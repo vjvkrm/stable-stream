@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { z } from "zod";
-import { useStableStream } from "@stable-stream/react";
-import { createIncrementalParser } from "@stable-stream/core";
+import { useStableStream } from "@vjvkrm/stable-stream-react";
+import { createIncrementalParser } from "@vjvkrm/stable-stream-core";
 
 type DemoScenario = "normal" | "hallucinations" | "truncated" | "source_error";
 

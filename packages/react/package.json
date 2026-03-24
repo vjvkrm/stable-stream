@@ -1,5 +1,5 @@
 {
-  "name": "@stable-stream/react",
+  "name": "@vjvkrm/stable-stream-react",
   "version": "1.0.0",
   "description": "React hook for streaming structured JSON from LLMs with zero layout shift.",
   "author": "Vijay Singh",
@@ -56,12 +56,12 @@
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
-    "@stable-stream/core": "^1.0.0",
+    "@vjvkrm/stable-stream-core": "^1.0.0",
     "react": "^18.0.0 || ^19.0.0",
     "zod": "^3.22.0 || ^4.0.0"
   },
   "devDependencies": {
-    "@stable-stream/core": "workspace:*",
+    "@vjvkrm/stable-stream-core": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19.0.0",
     "happy-dom": "^16.0.0",

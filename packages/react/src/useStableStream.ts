@@ -5,7 +5,7 @@ import {
   hydrate,
   type HydrateOptions,
   type StreamCompletionReason,
-} from '@stable-stream/core';
+} from '@vjvkrm/stable-stream-core';
 
 export interface UseStableStreamOptions<T extends z.ZodTypeAny> {
   /** Zod schema defining the expected shape */

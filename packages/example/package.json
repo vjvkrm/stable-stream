@@ -9,8 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@stable-stream/core": "workspace:*",
-    "@stable-stream/react": "workspace:*",
+    "@vjvkrm/stable-stream-core": "workspace:*",
+    "@vjvkrm/stable-stream-react": "workspace:*",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "zod": "^3.25.76"

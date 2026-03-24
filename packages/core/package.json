@@ -1,5 +1,5 @@
 {
-  "name": "@stable-stream/core",
+  "name": "@vjvkrm/stable-stream-core",
   "version": "1.0.0",
   "description": "Stream structured JSON from LLMs with zero layout shift. Incremental parsing, schema hydration, and type-safe merging.",
   "author": "Vijay Singh",
