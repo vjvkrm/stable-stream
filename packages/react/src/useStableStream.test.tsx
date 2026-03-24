@@ -219,11 +219,9 @@ describe('useStableStream', () => {
     // Initial state
     expect(result.current.data.name).toBe('');
 
-    // Await condition polling loop that avoids RTL internal macro starving
-    for (let i = 0; i < 50; i++) {
-        await new Promise(r => setTimeout(r, 100)); // Advance real event loop
-        if (result.current.isComplete) break;
-    }
+    await waitFor(() => {
+      expect(result.current.isComplete).toBe(true);
+    }, { timeout: 5000 });
 
     expect(result.current.isComplete).toBe(true);
     expect(result.current.data.name).toBe('Bob');

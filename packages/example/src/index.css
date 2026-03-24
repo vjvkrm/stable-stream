@@ -124,6 +124,7 @@ header p {
   background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
   color: white;
   border: none;
+  min-width: 140px;
   padding: 0.625rem 1.5rem;
   border-radius: 8px;
   font-size: 0.875rem;
@@ -172,9 +173,7 @@ header p {
 }
 
 .panel.without {
-  background-image: linear-gradient(#f1f5f9 1px, transparent 1px),
-    linear-gradient(90deg, #f1f5f9 1px, transparent 1px);
-  background-size: 20px 20px;
+  background: white;
   border-color: #fca5a5;
   border-width: 2px;
 }

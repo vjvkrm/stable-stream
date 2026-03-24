@@ -884,6 +884,8 @@ function TableWithHook({ stream }: { stream: AsyncIterable<string> | null }) {
 // ============================================
 
 export default function App() {
+  type DemoTarget = "form" | "table";
+
   const [formStream, setFormStream] = useState<ReturnType<
     typeof createDualStream
   > | null>(null);
@@ -895,6 +897,16 @@ export default function App() {
   const [rawChunks, setRawChunks] = useState<string[]>([]);
   const [isStreaming, setIsStreaming] = useState(false);
   const [scenario, setScenario] = useState<DemoScenario>("normal");
+  const [countdownTarget, setCountdownTarget] = useState<DemoTarget | null>(null);
+  const [countdownSeconds, setCountdownSeconds] = useState<number | null>(null);
+  const streamDoneTimerRef = useRef<number | null>(null);
+
+  const clearStreamDoneTimer = () => {
+    if (streamDoneTimerRef.current !== null) {
+      window.clearTimeout(streamDoneTimerRef.current);
+      streamDoneTimerRef.current = null;
+    }
+  };
 
   const runFormComparison = () => {
     setIsStreaming(true);
@@ -912,7 +924,11 @@ export default function App() {
     };
 
     setFormStream(stream);
-    setTimeout(() => setIsStreaming(false), stream.estimatedDurationMs + 400);
+    clearStreamDoneTimer();
+    streamDoneTimerRef.current = window.setTimeout(() => {
+      setIsStreaming(false);
+      streamDoneTimerRef.current = null;
+    }, stream.estimatedDurationMs + 400);
   };
 
   const runTableComparison = () => {
@@ -931,7 +947,59 @@ export default function App() {
     };
 
     setTableStream(stream);
-    setTimeout(() => setIsStreaming(false), stream.estimatedDurationMs + 400);
+    clearStreamDoneTimer();
+    streamDoneTimerRef.current = window.setTimeout(() => {
+      setIsStreaming(false);
+      streamDoneTimerRef.current = null;
+    }, stream.estimatedDurationMs + 400);
+  };
+
+  useEffect(() => {
+    if (!countdownTarget || countdownSeconds === null) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      if (countdownSeconds === 1) {
+        setCountdownTarget(null);
+        setCountdownSeconds(null);
+
+        if (countdownTarget === "form") {
+          runFormComparison();
+        } else {
+          runTableComparison();
+        }
+        return;
+      }
+
+      setCountdownSeconds((prev) => (prev === null ? null : prev - 1));
+    }, 1000);
+
+    return () => window.clearTimeout(timer);
+  }, [countdownTarget, countdownSeconds, scenario]);
+
+  useEffect(() => {
+    return () => {
+      clearStreamDoneTimer();
+    };
+  }, []);
+
+  const queueDemo = (target: DemoTarget) => {
+    if (isStreaming || countdownSeconds !== null) {
+      return;
+    }
+
+    setCountdownTarget(target);
+    setCountdownSeconds(5);
+  };
+
+  const isBusy = isStreaming || countdownSeconds !== null;
+  const getButtonLabel = (target: DemoTarget) => {
+    if (countdownTarget === target && countdownSeconds !== null) {
+      return `Starting in ${countdownSeconds}s`;
+    }
+
+    return "Stream Demo";
   };
 
   return (
@@ -948,6 +1016,7 @@ export default function App() {
             <select
               value={scenario}
               onChange={(e) => setScenario(e.target.value as DemoScenario)}
+              disabled={isBusy}
             >
               <option value="normal">Normal</option>
               <option value="hallucinations">Hallucinated extra keys</option>
@@ -967,10 +1036,10 @@ export default function App() {
           <h2>Form Streaming</h2>
           <button
             className="run-btn"
-            onClick={runFormComparison}
-            disabled={isStreaming}
+            onClick={() => queueDemo("form")}
+            disabled={isBusy}
           >
-            Stream Demo
+            {getButtonLabel("form")}
           </button>
         </div>
         
@@ -989,10 +1058,10 @@ export default function App() {
           <h2>Table Streaming</h2>
           <button
             className="run-btn"
-            onClick={runTableComparison}
-            disabled={isStreaming}
+            onClick={() => queueDemo("table")}
+            disabled={isBusy}
           >
-            Stream Demo
+            {getButtonLabel("table")}
           </button>
         </div>
 

@@ -264,20 +264,22 @@ export function useStableStream<T extends z.ZodTypeAny>(
             }
 
             const flushUpdate = () => {
-              if (mountedRef.current && pendingUpdateRef.current) {
-                const finalPaths = Array.from(pendingUpdateRef.current.changedPaths);
-                setState(prev => ({
-                  ...prev,
-                  data: pendingUpdateRef.current!.data as z.infer<T>,
-                  isPartial: pendingUpdateRef.current!.isPartial,
-                  completionReason: pendingUpdateRef.current!.completionReason,
-                  changedPaths: finalPaths,
-                }));
-                pendingUpdateRef.current = null;
-              }
+              const pendingUpdate = pendingUpdateRef.current;
+              pendingUpdateRef.current = null;
               rafRef.current = null;
               timerRef.current = null;
               lastUpdateRef.current = Date.now();
+
+              if (mountedRef.current && pendingUpdate?.data !== null) {
+                const finalPaths = Array.from(pendingUpdate.changedPaths);
+                setState(prev => ({
+                  ...prev,
+                  data: pendingUpdate.data,
+                  isPartial: pendingUpdate.isPartial,
+                  completionReason: pendingUpdate.completionReason,
+                  changedPaths: finalPaths,
+                }));
+              }
             };
 
             if (throttle === true) {
