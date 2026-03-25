@@ -89,6 +89,44 @@ The key insight: **your Zod schema already knows the full shape.** stable-stream
 
 ---
 
+## Why Existing Solutions Aren't Enough
+
+### JSON fixer libraries (`partial-json`, `best-effort-json-parser`, `json-repair`)
+
+These close incomplete JSON so `JSON.parse` works. They solve parsing — but parsing is only one-third of the problem.
+
+- **T=0 is still empty.** Before the first chunk, your UI has nothing to render. Layout shifts when fields appear.
+- **No type safety.** The result is `any`. Every field access needs a null check.
+- **No hallucination protection.** Extra keys from the LLM pass straight through.
+- **O(n²) by default.** Most re-parse the entire accumulated string on every chunk.
+
+### Vercel AI SDK `streamObject`
+
+The closest existing solution. Returns a `partialObjectStream` with typed partial objects — but the type is `DeepPartial<T>`, meaning every field is `| undefined`.
+
+- **No skeleton at T=0.** First yield happens only after the LLM sends enough tokens. Until then, nothing.
+- **Every field needs a guard.** `partial?.name ?? '...'`, `partial?.items?.map(...)` — null checks everywhere.
+- **No hallucination protection during streaming.** Partial outputs [cannot be validated against the schema](https://ai-sdk.dev/docs/reference/ai-sdk-core/stream-object).
+- **Vendor-locked.** Only works with Vercel AI SDK providers.
+
+### The gap
+
+| | JSON fixers | Vercel `streamObject` | stable-stream |
+|---|---|---|---|
+| Parse incomplete JSON | Yes | Yes | Yes |
+| Full typed data at T=0 | No | No | **Yes** |
+| Fields always defined | No (`any`) | No (`DeepPartial<T>`) | **Yes** (`T`) |
+| Layout shift protection | No | No | **Yes** |
+| Hallucination protection | No | No (during stream) | **Yes** |
+| Change tracking | No | No | **Yes** |
+| Array pre-fill | No | No | **Yes** |
+| Works with any LLM SDK | Yes | No | **Yes** |
+| Structural sharing | No | No | **Yes** |
+
+**Existing tools handle parsing. stable-stream handles stability.** Complete shape from frame one, then fills it in.
+
+---
+
 ## Installation
 
 ```bash
