@@ -270,7 +270,7 @@ export function useStableStream<T extends z.ZodTypeAny>(
               timerRef.current = null;
               lastUpdateRef.current = Date.now();
 
-              if (mountedRef.current && pendingUpdate?.data !== null) {
+              if (mountedRef.current && pendingUpdate && pendingUpdate.data !== null) {
                 const finalPaths = Array.from(pendingUpdate.changedPaths);
                 setState(prev => ({
                   ...prev,
