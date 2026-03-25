@@ -50,10 +50,10 @@ importers:
 
   packages/example:
     dependencies:
-      '@stable-stream/core':
+      '@vjvkrm/stable-stream-core':
         specifier: workspace:*
         version: link:../core
-      '@stable-stream/react':
+      '@vjvkrm/stable-stream-react':
         specifier: workspace:*
         version: link:../react
       react:
@@ -84,15 +84,15 @@ importers:
 
   packages/react:
     devDependencies:
-      '@stable-stream/core':
-        specifier: workspace:*
-        version: link:../core
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@18.3.7(@types/react@19.2.13))(@types/react@19.2.13)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
       '@types/react':
         specifier: ^19.0.0
         version: 19.2.13
+      '@vjvkrm/stable-stream-core':
+        specifier: workspace:*
+        version: link:../core
       happy-dom:
         specifier: ^16.0.0
         version: 16.8.1
